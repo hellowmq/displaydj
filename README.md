@@ -129,6 +129,6 @@ bash scripts/package.sh
 
 ## 许可与致谢
 
-MIT，完整许可见 [LICENSE](LICENSE) 与 [LICENSES](LICENSES)。本项目包含 DisplayDJ 的派生代码，因此保留 **MonitorControl Contributors** 的版权与许可声明。DisplayDJ 之外的 VibeDisplay 来源单独记录，不能再将合并后的整个项目描述为“未派生自 MonitorControl”。
+MIT，完整许可见 [LICENSE](LICENSE) 与 [LICENSES](LICENSES)。本项目的部分实现派生自 MonitorControl，因此保留 **MonitorControl Contributors** 的版权与许可声明。合并进 DisplayDJ 的 VibeDisplay 来源单独记录，不能将整个项目描述为“未派生自 MonitorControl”。
 
 维护者 GitHub：[@hellowmq](https://github.com/hellowmq)。项目仓库：[hellowmq/displaydj](https://github.com/hellowmq/displaydj)。
