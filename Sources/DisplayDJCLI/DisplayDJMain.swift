@@ -6,7 +6,7 @@ enum DisplayDJMain {
     let arguments = Array(CommandLine.arguments.dropFirst())
 
     do {
-      var command = try await DisplayDJCommand.asyncParseAsRoot(arguments)
+      var command = try DisplayDJCommand.parseAsRoot(arguments)
       if var asyncCommand = command as? AsyncParsableCommand {
         try await asyncCommand.run()
       } else {

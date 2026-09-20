@@ -5,7 +5,7 @@
 | 项目 | 结果 | 证据 / 范围 |
 | --- | --- | --- |
 | Debug 构建 | 通过 | `swift build`，主 CLI、兼容 CLI、App 和库 |
-| 自动化测试 | 通过，566 项 | `swift test`：Vibe Core 93、Server 45、DisplayDJ Core 187、兼容 CLI 9、App 232 |
+| 自动化测试 | 通过，576 项 | `swift test`：Vibe Core 93、Server 45、DisplayDJ Core 188、兼容 CLI 9、App 241 |
 | 新增整合测试 | 通过 | 规范 UUID、非法目标不触达硬件、未验证写入失败、MainActor 桥接、非有限输入、离线与 panic 快照保留、硬件锁串行与异常释放 |
 | 主 CLI 烟雾测试 | 通过 | version、help、错误 envelope / 退出码、只读显示器枚举与诊断 |
 | 本地 HTTP | 通过 | 独立临时状态目录，拒绝无令牌请求，health / displays / sessions，SIGTERM 清理描述文件 |
@@ -17,13 +17,14 @@
 | 真实亮度写入 / 恢复 | 未运行 | 本次只读探测，未对用户显示器发出调光操作 |
 | 真实断开 / 重连 | 未运行 | 未改变显示拓扑 |
 | Intel / 双架构 | 未验证 | 本次仅 arm64 构建 |
-| GitHub CI / Release | 未运行 / 未发布 | 远端为空；workflow 已落地，尚无远端运行证据 |
+| GitHub CI | 已配置，最新状态见 README 徽章 | `macos-15` 执行构建、576 项测试、隔离烟雾测试和 App bundle 构建；此前的兼容 CLI 并发编译失败已在本次修复 |
+| GitHub Release | 未发布 | 仓库已有 `v0.2.0` Git tag，但没有据此声称存在正式 Release 或可分发安装包 |
 | Developer ID / 公证 | 未完成 | 没有声称已公证或可无提示分发 |
 
-测试包含两种框架：XCTest 138 项，加 Swift Testing 428 项，共 566 项。测试日志中同一个 XCTest 汇总可能出现两遍，统计时未重复计数。
+测试包含两种框架：XCTest 138 项，加 Swift Testing 438 项，共 576 项。测试日志中同一个 XCTest 汇总可能出现两遍，统计时未重复计数。
 
 回归修复：原有 `testRestoreAllSeedsFromDiskAndClearsIt` 要求无条件丢弃未恢复快照，与新的可重试恢复契约冲突；已改为验证离线显示器的快照保留，并新增跨重载及 panic 的保留断言。
 
 硬件探测结论只代表此机器在运行时能返回发现与诊断信息，不构成某型号显示器的写入兼容性认证。
 
-本轮重新命名为 DisplayDJ / display-cli、重置为 0.1.0 后，已重跑上述构建、566 项测试及烟雾测试。Dell 身份兼容修复与真实读取的失败边界见 [硬件检查](HARDWARE.md)。没有导入旧 Git 历史，当前仓库仍无提交和远端；工作目录名称不作为产品名称。
+项目已更新到 `0.2.3`，品牌标记统一为 Rounded Channel + Signature Gap + Fader，普通亮度交互统一使用 Spectral Cyan。Dell 身份兼容修复与真实读取的失败边界见[硬件检查](HARDWARE.md)。仓库已公开在 `hellowmq/displaydj`，默认分支为 `master`；源项目 Git 历史未导入，来源与许可证据继续单独保留。

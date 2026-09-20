@@ -6,13 +6,15 @@
 
 A macOS menu bar app, command-line tool, and local API for display control and agent workflows.
 
-`macOS 13+` · `Swift 6` · `Apple Silicon DDC/CI` · `MIT`
+[![macOS checks](https://github.com/hellowmq/displaydj/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/hellowmq/displaydj/actions/workflows/ci.yml)
+
+`v0.2.3` · `macOS 13+` · `Swift 6` · `Apple Silicon DDC/CI` · `MIT`
 
 </div>
 
 DisplayDJ 将 **DisplayDJ 的菜单栏与外屏硬件引擎**，和 **VibeDisplay 的 CLI、HTTP、保活租约、Agent 生命周期**合并为一个 Swift Package。外屏亮度读写共用同一套实现，并通过进程间锁协调 App、CLI 与后台服务。
 
-这是独立新项目，从 `0.1.0` 开始，仓库命名为 `displaydj`。采用一个仓库统一维护 App、CLI、硬件内核、服务和版本；不导入两个源项目的 Git 历史。GitHub 远端尚未配置；安装包为本机架构、临时签名，未做 Apple 公证。当前验证结果与限制见 [验收记录](docs/VALIDATION.md)。
+当前版本为 `0.2.3`，由 [`master`](https://github.com/hellowmq/displaydj/tree/master) 统一维护 App、CLI、硬件内核、服务和版本。项目已有 GitHub Actions 构建与测试，但尚未发布经过 Developer ID 签名和 Apple 公证的安装包；当前验证结果与限制见[验收记录](docs/VALIDATION.md)。
 
 <p align="center">
   <img src="Assets/DisplayDJIcon.svg" alt="DisplayDJ：开放圆角控制通道、固定缺口与横向 fader" width="160">
@@ -103,9 +105,15 @@ flowchart LR
 
 ## 开发与打包
 
+GitHub Actions 在 `macos-15` 上对每次 push 和 pull request 执行与本地相同的核心检查：
+
 ```bash
+swift build
 swift test
 python3 scripts/smoke.py
+bash scripts/build-app.sh
+
+# 可选：生成本机架构、ad-hoc 签名的 ZIP
 bash scripts/package.sh
 ```
 
@@ -123,4 +131,4 @@ bash scripts/package.sh
 
 MIT，完整许可见 [LICENSE](LICENSE) 与 [LICENSES](LICENSES)。本项目包含 DisplayDJ 的派生代码，因此保留 **MonitorControl Contributors** 的版权与许可声明。DisplayDJ 之外的 VibeDisplay 来源单独记录，不能再将合并后的整个项目描述为“未派生自 MonitorControl”。
 
-维护者 GitHub：[hellowmq](https://github.com/hellowmq)。已选定单仓库名 `displaydj`；远端尚未创建或配置，不展示未发布的仓库链接。
+维护者 GitHub：[@hellowmq](https://github.com/hellowmq)。项目仓库：[hellowmq/displaydj](https://github.com/hellowmq/displaydj)。

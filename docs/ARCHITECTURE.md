@@ -32,6 +32,6 @@ DDC 公共读写入口获得 `HardwareProcessLock`，覆盖整个读或写事务
 
 Gamma 与 DisplayServices 不受 DDC 硬件锁覆盖。内部显示器与 Gamma 尚未整合到菜单栏卡片；这是明确的后续工作。
 
-## 产品命名与 Git 起点
+## 产品命名与来源边界
 
-应用 DisplayDJ、主命令 display-cli、仓库 displaydj；兼容命令 displaydj 只用于旧脚本。三个可执行产品共享 `VibeVersion.current` 这一版本来源。新仓库没有导入源项目的 .git；本地工作目录名字暂保留 vibe-display，不影响产品或仓库名。首次提交将从空历史开始。版权来源保留，不能因新 Git 历史而移除许可。
+应用 DisplayDJ、主命令 display-cli、仓库 displaydj；兼容命令 displaydj 只用于旧脚本。三个可执行产品共享 `VibeVersion.current` 这一版本来源。当前仓库是独立 Git 历史，没有导入两个源项目的 `.git`；版权与代码来源记录仍须保留，详见[来源与许可](PROVENANCE.md)。
