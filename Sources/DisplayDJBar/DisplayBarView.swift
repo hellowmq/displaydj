@@ -101,7 +101,7 @@ struct DisplayBarView: View {
           .font(.system(size: 10, weight: .medium))
         }
         .buttonStyle(.plain)
-        .foregroundColor(isEditing ? .accentColor : .secondary)
+        .foregroundColor(isEditing ? DisplayDJBrandColor.spectralCyan : .secondary)
         .accessibilityLabel(
           isEditing
             ? BrightnessAccessibility.doneEditingLabel
@@ -247,11 +247,11 @@ private struct DisplayCard: View {
             .foregroundColor(.secondary)
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
-            .background(Capsule().fill(Color.accentColor.opacity(0.12)))
+            .background(Capsule().fill(DisplayDJBrandColor.spectralCyan.opacity(0.12)))
             .accessibilityLabel(ScrollTargetBadge.accessibilityLabel)
         } else if isSelected {
           Circle()
-            .fill(Color.accentColor)
+            .fill(DisplayDJBrandColor.spectralCyan)
             .frame(width: 4, height: 4)
             .accessibilityHidden(true)
         }
@@ -317,10 +317,10 @@ private struct DisplayCard: View {
     .padding(.vertical, 6)
     .background(
       RoundedRectangle(cornerRadius: 7)
-        .fill(isSelected ? Color.accentColor.opacity(0.06) : Color.primary.opacity(0.03))
+        .fill(isSelected ? DisplayDJBrandColor.spectralCyan.opacity(0.06) : Color.primary.opacity(0.03))
         .overlay(
           RoundedRectangle(cornerRadius: 7)
-            .strokeBorder(isSelected ? Color.accentColor.opacity(0.2) : Color.clear, lineWidth: 1)
+            .strokeBorder(isSelected ? DisplayDJBrandColor.spectralCyan.opacity(0.2) : Color.clear, lineWidth: 1)
         )
     )
     .contentShape(Rectangle())

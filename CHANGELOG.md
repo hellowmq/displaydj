@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3 — Brand cyan controls
+
+- Replace the legacy amber brightness fill with Spectral Cyan (`#55D9FF`).
+- Share the same runtime color token across the slider, keyboard focus ring and selected-display treatment.
+- Keep semantic lime, violet, amber and coral out of ordinary brightness progress.
+
 ## 0.2.2 — Signature Gap mark
 
 - Reduce the brand mark to three elements: a rounded channel, a fixed right-side gap and a horizontal fader.

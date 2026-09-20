@@ -101,7 +101,7 @@ struct BrightnessSlider: View {
           .fill(.quaternary)
           .frame(height: Metrics.trackHeight)
 
-        // Flat, and the one place a colour is chosen here.
+        // Flat, and the one place the brightness fill adopts the product brand.
         //
         // It was a three-stop `LinearGradient` — near-black, amber, yellow — painted across the
         // *fill* rather than across the track. Because the gradient was anchored to the shape it
@@ -112,7 +112,7 @@ struct BrightnessSlider: View {
         // fifth of the range. At 5pt that was a detail on a hairline; R2 made this bar the
         // card's primary control, where it is the first thing anyone sees.
         Capsule()
-          .fill(Color(red: 0.90, green: 0.72, blue: 0.18))
+          .fill(DisplayDJBrandColor.spectralCyan)
           .frame(width: trackFillWidth(in: geometry.size.width), height: Metrics.trackHeight)
           .animation(.interactiveSpring(response: 0.15), value: trackState.fillRatio)
 
@@ -204,7 +204,7 @@ struct BrightnessSlider: View {
   private var focusRing: some View {
     if isFocused {
       RoundedRectangle(cornerRadius: 8)
-        .strokeBorder(Color.accentColor.opacity(0.85), lineWidth: 2)
+        .strokeBorder(DisplayDJBrandColor.spectralCyan.opacity(0.85), lineWidth: 2)
         .frame(height: Metrics.focusRingHeight)
     }
   }
