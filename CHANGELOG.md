@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2 — Signature Gap mark
+
+- Reduce the brand mark to three elements: a rounded channel, a fixed right-side gap and a horizontal fader.
+- Remove the central knob, cue, decorative arc, inner border and shadow-dependent detail from the app icon.
+- Redraw the 18-point menu-bar template independently with the same silhouette and no circular elements.
+- Make the smallest glyph the source of the size system and tighten the brand contract around silhouette-first recognition.
+
 ## 0.2.1 — DJ Gate identity system
 
 - Replace the generic display-and-target composition with the asymmetric DisplayDJ DJ Gate: one calibration channel, one fader knob and one state cue.

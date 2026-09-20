@@ -1,31 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
-  <title id="title">DisplayDJ DJ Gate app icon</title>
-  <desc id="desc">An asymmetric calibration channel with a fader knob and active cue.</desc>
+  <title id="title">DisplayDJ app icon</title>
+  <desc id="desc">An open rounded control channel with a signature gap and horizontal fader.</desc>
   <defs>
-    <linearGradient id="canvas" x1="94" y1="56" x2="930" y2="968" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#18222E"/>
+    <linearGradient id="canvas" x1="120" y1="72" x2="904" y2="952" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111821"/>
       <stop offset="1" stop-color="#0A0F18"/>
     </linearGradient>
-    <linearGradient id="gate" x1="326" y1="222" x2="698" y2="788" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#8AEBFF"/>
-      <stop offset=".55" stop-color="#55D9FF"/>
-      <stop offset="1" stop-color="#36BCE8"/>
-    </linearGradient>
-    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
-      <feDropShadow dx="0" dy="24" stdDeviation="20" flood-color="#000000" flood-opacity=".34"/>
-    </filter>
   </defs>
   <rect width="1024" height="1024" rx="226" fill="url(#canvas)"/>
-  <rect x="32" y="32" width="960" height="960" rx="198" fill="none" stroke="#2A3745" stroke-width="8" opacity=".8"/>
-  <path d="M182 360C182 240 280 142 400 142h220" fill="none" stroke="#F4F7FB" stroke-width="12" stroke-linecap="round" opacity=".1"/>
-  <g filter="url(#shadow)">
-    <path d="M364 240v436c0 100 58 146 146 146h88c84 0 142-52 142-142v-68" fill="none" stroke="url(#gate)" stroke-width="72" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M452 240h194c52 0 94 42 94 94v102" fill="none" stroke="url(#gate)" stroke-width="72" stroke-linecap="round" stroke-linejoin="round"/>
-  </g>
-  <path d="M511 314v388" fill="none" stroke="#2A3745" stroke-width="56" stroke-linecap="round"/>
-  <path d="M511 334v272" fill="none" stroke="#111821" stroke-width="20" stroke-linecap="round"/>
-  <circle cx="511" cy="536" r="94" fill="#111821" stroke="url(#gate)" stroke-width="30"/>
-  <circle cx="511" cy="536" r="42" fill="#55D9FF"/>
-  <circle cx="765" cy="520" r="27" fill="#B8F36A"/>
-  <path d="M704 520h-50" fill="none" stroke="#B8F36A" stroke-width="22" stroke-linecap="round"/>
+  <path d="M704 296V270C704 224 666 186 620 186H392C300 186 226 260 226 352V672C226 764 300 838 392 838H620C666 838 704 800 704 754V728" fill="none" stroke="#55D9FF" stroke-width="82" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M410 512H704" fill="none" stroke="#55D9FF" stroke-width="72" stroke-linecap="round"/>
 </svg>

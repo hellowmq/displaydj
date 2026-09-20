@@ -15,10 +15,10 @@ DisplayDJ 将 **DisplayDJ 的菜单栏与外屏硬件引擎**，和 **VibeDispla
 这是独立新项目，从 `0.1.0` 开始，仓库命名为 `displaydj`。采用一个仓库统一维护 App、CLI、硬件内核、服务和版本；不导入两个源项目的 Git 历史。GitHub 远端尚未配置；安装包为本机架构、临时签名，未做 Apple 公证。当前验证结果与限制见 [验收记录](docs/VALIDATION.md)。
 
 <p align="center">
-  <img src="Assets/DisplayDJIcon.svg" alt="DisplayDJ：显示器框架、垂直 fader 与亮度控制" width="160">
+  <img src="Assets/DisplayDJIcon.svg" alt="DisplayDJ：开放圆角控制通道、固定缺口与横向 fader" width="160">
 </p>
 
-DisplayDJ 的视觉锚点是 **DJ Gate（校准通道）**：一条不对称的可恢复通道承载 fader 与状态 cue，而不是通用的显示器或太阳图标。完整尺寸和状态规则见[品牌系统](docs/BRAND.md)。
+DisplayDJ 的视觉锚点是 **Rounded Channel + Signature Gap + Fader**：辨识度来自开放轮廓和固定缺口，而不是复杂的内部隐喻。完整规则见[品牌系统](docs/BRAND.md)。
 
 ## 一个工具，三个入口
 
