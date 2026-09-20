@@ -1,0 +1,12 @@
+[
+  {
+    "archive": "VibeDisplay.zip",
+    "sha256": "12669c6fe40aefd162570e9d22bbdf27b9d367b858a92596354010cf4317329a",
+    "swiftSourceAndTestFiles": 50
+  },
+  {
+    "archive": "DisplayDJ.zip",
+    "sha256": "24a2f3a136cce86d7692245a06dc2d95b7c7c8ae5d18ffe663d353165afbbd98",
+    "swiftSourceAndTestFiles": 165
+  }
+]

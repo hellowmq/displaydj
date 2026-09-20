@@ -1,0 +1,23 @@
+name: macOS checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: swift --version
+      - name: Build
+        run: swift build
+      - name: Tests
+        run: swift test
+      - name: CLI and isolated HTTP smoke test
+        run: python3 scripts/smoke.py
+      - name: Build application bundle
+        run: bash scripts/build-app.sh
