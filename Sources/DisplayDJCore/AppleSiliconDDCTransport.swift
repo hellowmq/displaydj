@@ -33,9 +33,19 @@ struct AppleSiliconDDCTransport: DDCTransport {
   private static let minimumReplyByteCount = 3
   /// DDC's seven-bit body length plus source, length, and checksum bytes.
   private static let maximumReplyByteCount = 130
-  /// Separates consecutive copies of one request frame. Verified against a
+  /// Separates consecutive copies of one Set request frame. Verified against a
   /// display that ignores an isolated Set frame at this spacing.
   private static let repeatedFrameSpacing: TimeInterval = 0.05
+  /// Apple Silicon IOAV compatibility timings, aligned with MonitorControl's
+  /// proven DDC path. Some displays reject an immediate first transaction even
+  /// though their DDC/CI channel is otherwise available.
+  private static let getWriteLeadTime: TimeInterval = 0.01
+  private static let getRetryDelay: TimeInterval = 0.02
+  /// MonitorControl creates and retains its IOAV service during display
+  /// discovery, before any DDC request is issued. Our operation-scoped service
+  /// needs an equivalent settling window before its first bus transaction.
+  private static let serviceSettleTime: TimeInterval = 0.10
+  private static let maximumGetAttempts = 5
 
   private let functions: AppleSiliconIOAVFunctionTable
   private let serviceResolver: any AppleSiliconDDCServiceResolving
@@ -104,6 +114,15 @@ struct AppleSiliconDDCTransport: DDCTransport {
     defer { unmanagedIOAVService.release() }
     try Task.checkCancellation()
 
+    if ioavRequest.replyCapacity > 0 {
+      await replyScheduler(Self.serviceSettleTime)
+      return try await exchangeGet(
+        ioavRequest,
+        request: request,
+        service: ioavService
+      )
+    }
+
     // A repeated frame is never split by a cancellation check: the copies are one
     // indivisible bus transaction, and stopping between them would leave exactly
     // the half-applied Set that the repeat exists to avoid.
@@ -113,31 +132,52 @@ struct AppleSiliconDDCTransport: DDCTransport {
       }
       try write(ioavRequest.packet, to: ioavService)
     }
-    guard ioavRequest.replyCapacity > 0 else {
-      try Task.checkCancellation()
-      return DDCTransportResponse(exactFrame: [])
+    try Task.checkCancellation()
+    return DDCTransportResponse(exactFrame: [])
+  }
+
+  /// Uses MonitorControl-compatible timing and bounded recovery for a read-only
+  /// Get VCP request. A Get has no display-state side effect, so retrying an
+  /// otherwise unmapped IOAV status is safe and prevents one transient driver
+  /// failure from being misreported as a permanently unsupported cable.
+  private func exchangeGet(
+    _ ioavRequest: AppleSiliconIOAVRequest,
+    request: DDCTransportRequest,
+    service: CFTypeRef
+  ) async throws -> DDCTransportResponse {
+    for attempt in 1...Self.maximumGetAttempts {
+      do {
+        await replyScheduler(Self.getWriteLeadTime)
+        try write(ioavRequest.packet, to: service)
+        await replyScheduler(Self.getWriteLeadTime)
+        try write(ioavRequest.packet, to: service)
+        await replyScheduler(max(request.replyDelay, 0.05))
+        let reply = try read(capacity: ioavRequest.replyCapacity, from: service)
+        try Task.checkCancellation()
+        return DDCTransportResponse(exactFrame: try Self.exactReplyFrame(from: reply))
+      } catch is CancellationError {
+        throw CancellationError()
+      } catch let error as DDCTransportError {
+        guard attempt < Self.maximumGetAttempts, Self.shouldRetryGet(error) else {
+          throw error
+        }
+        await replyScheduler(Self.getRetryDelay)
+      }
     }
 
-    // Some displays require a Get compatibility handshake: the first I2C
-    // write primes the bus and the second triggers the request after 10 ms.
-    // A Set reaches its own repeat through `writeFrameCount` instead, so that an
-    // unverified Set escalates only when the executor asks it to.
-    await replyScheduler(0.01)
-    try write(ioavRequest.packet, to: ioavService)
-
-    // Once a Get request is sent, finish the bounded reply delay and drain one
-    // read before observing cancellation. Otherwise a stale reply could be
-    // consumed by the next exchange on the same serialized transport resource.
-    await replyScheduler(request.replyDelay)
-    let reply = try read(
-      capacity: ioavRequest.replyCapacity,
-      from: ioavService
+    throw DDCTransportError.permanentFailure(
+      operation: "unreachable-get-attempt-loop",
+      status: nil
     )
-    try Task.checkCancellation()
+  }
 
-    return DDCTransportResponse(
-      exactFrame: try Self.exactReplyFrame(from: reply)
-    )
+  private static func shouldRetryGet(_ error: DDCTransportError) -> Bool {
+    switch error {
+    case .unavailable:
+      false
+    case .busy, .timedOut, .noReply, .transientFailure, .permanentFailure:
+      true
+    }
   }
 
   private func createIOAVService(

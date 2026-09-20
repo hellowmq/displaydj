@@ -98,7 +98,7 @@ public final class BrightnessService {
             transports.append(.ddc)
         } else if !display.isBuiltin {
             #if arch(arm64)
-            notes.append("no DDC/CI channel found — monitor may not expose DDC over this cable/hub")
+            notes.append("DDC/CI read was unavailable to this app; this does not establish a cable, hub, or monitor limitation")
             #else
             notes.append("DDC on Intel Macs is not implemented yet (roadmap: ddc-intel)")
             #endif

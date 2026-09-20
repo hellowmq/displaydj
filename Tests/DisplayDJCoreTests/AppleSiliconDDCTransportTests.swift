@@ -168,8 +168,8 @@ extension AppleSiliconDDCTransportTests {
     #expect(events.count(where: isWriteEvent) == 0)
   }
 
-  @Test("write status is not ignored and prevents a read")
-  func writeStatusIsNotIgnored() async throws {
+  @Test("Get retries a transient write status before returning its final error")
+  func getRetriesWriteStatusBeforeReturningFinalError() async throws {
     fakeIOAVState.reset(reply: [], writeStatus: kIOReturnBusy)
     let transport = try makeTransport()
 
@@ -185,9 +185,35 @@ extension AppleSiliconDDCTransportTests {
 
     #expect(error == .busy)
     let events = fakeIOAVState.eventsSnapshot()
-    #expect(events.count(where: isWriteEvent) == 1)
+    #expect(events.count(where: isWriteEvent) == 5)
     #expect(events.count(where: isReadEvent) == 0)
     #expect(events.count(where: { $0 == .releaseIOAVService }) == 1)
+  }
+
+  @Test("Get uses MonitorControl-compatible timing and recovers after a write failure")
+  func getUsesCompatibilityTimingAndRetriesUnknownWriteStatus() async throws {
+    let expectedReply = getFeatureReply(featureCode: 0x10, currentValue: 42)
+    fakeIOAVState.reset(
+      reply: expectedReply,
+      writeStatuses: [IOReturn(bitPattern: 0xE0114000), KERN_SUCCESS, KERN_SUCCESS]
+    )
+    let delays = LockedDelays()
+    let transport = try makeTransport { delay in
+      delays.append(delay)
+    }
+
+    let response = try await transport.exchange(
+      DDCTransportRequest(
+        logicalFrame: DDCVCPCodec.getFeatureRequest(featureCode: 0x10),
+        replyCapacity: 11
+      ),
+      on: makeAppleSiliconTarget()
+    )
+
+    #expect(response.exactFrame == expectedReply)
+    #expect(fakeIOAVState.eventsSnapshot().count(where: isWriteEvent) == 3)
+    #expect(fakeIOAVState.eventsSnapshot().count(where: isReadEvent) == 1)
+    #expect(delays.snapshot() == [0.10, 0.01, 0.02, 0.01, 0.01, 0.05])
   }
 
   @Test("read status is mapped instead of returning zero-filled success")
@@ -207,8 +233,8 @@ extension AppleSiliconDDCTransportTests {
 
     #expect(error == .timedOut)
     let events = fakeIOAVState.eventsSnapshot()
-    #expect(events.count(where: isWriteEvent) == 2)
-    #expect(events.count(where: isReadEvent) == 1)
+    #expect(events.count(where: isWriteEvent) == 10)
+    #expect(events.count(where: isReadEvent) == 5)
     #expect(events.count(where: { $0 == .releaseIOAVService }) == 1)
   }
 
@@ -218,8 +244,12 @@ extension AppleSiliconDDCTransportTests {
       reply: getFeatureReply(featureCode: 0x10, currentValue: 40)
     )
     let replyGate = TestGate()
+    let delays = LockedDelays()
     let transport = try makeTransport { _ in
-      await replyGate.wait()
+      delays.append(1)
+      if delays.snapshot().count >= 4 {
+        await replyGate.wait()
+      }
     }
     let task = Task {
       try await transport.exchange(

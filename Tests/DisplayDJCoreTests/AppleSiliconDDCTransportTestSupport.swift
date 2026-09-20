@@ -18,6 +18,7 @@ struct FakeIOAVConfiguration: Sendable {
   let reply: [UInt8]
   let createSucceeds: Bool
   let writeStatus: IOReturn
+  let writeStatuses: [IOReturn]
   let readStatus: IOReturn
 }
 
@@ -27,14 +28,17 @@ final class FakeIOAVState: @unchecked Sendable {
     reply: [],
     createSucceeds: true,
     writeStatus: KERN_SUCCESS,
+    writeStatuses: [],
     readStatus: KERN_SUCCESS
   )
   private var events: [FakeIOAVEvent] = []
+  private var writeStatusIndex = 0
 
   func reset(
     reply: [UInt8],
     createSucceeds: Bool = true,
     writeStatus: IOReturn = KERN_SUCCESS,
+    writeStatuses: [IOReturn] = [],
     readStatus: IOReturn = KERN_SUCCESS
   ) {
     withLock {
@@ -42,9 +46,11 @@ final class FakeIOAVState: @unchecked Sendable {
         reply: reply,
         createSucceeds: createSucceeds,
         writeStatus: writeStatus,
+        writeStatuses: writeStatuses,
         readStatus: readStatus
       )
       events = []
+      writeStatusIndex = 0
     }
   }
 
@@ -91,7 +97,11 @@ final class FakeIOAVState: @unchecked Sendable {
           bytes: bytes
         )
       )
-      return configuration.writeStatus
+      defer { writeStatusIndex += 1 }
+      guard writeStatusIndex < configuration.writeStatuses.count else {
+        return configuration.writeStatus
+      }
+      return configuration.writeStatuses[writeStatusIndex]
     }
   }
 
@@ -120,6 +130,23 @@ final class FakeIOAVState: @unchecked Sendable {
     lock.lock()
     defer { lock.unlock() }
     return operation()
+  }
+}
+
+final class LockedDelays: @unchecked Sendable {
+  private let lock = NSLock()
+  private var values: [TimeInterval] = []
+
+  func append(_ value: TimeInterval) {
+    lock.lock()
+    values.append(value)
+    lock.unlock()
+  }
+
+  func snapshot() -> [TimeInterval] {
+    lock.lock()
+    defer { lock.unlock() }
+    return values
   }
 }
 

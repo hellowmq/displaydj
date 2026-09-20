@@ -129,7 +129,7 @@ enum DisplayConnectionNoticePresenter {
     case .timeout, .busy:
       "系统正忙或响应超时。请稍后重试。"
     case .transportFailure:
-      "与显示服务的通信中断。请重新插拔显示器线缆后重试。"
+      "显示服务没有完成请求；这不代表线缆未插紧。请稍后重试。"
     default:
       "请重试一次；若反复失败，请重新插拔显示器线缆。"
     }
