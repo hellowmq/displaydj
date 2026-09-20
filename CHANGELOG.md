@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1 — DJ Gate identity system
+
+- Replace the generic display-and-target composition with the asymmetric DisplayDJ DJ Gate: one calibration channel, one fader knob and one state cue.
+- Make the same gate shape the menu-bar template mark, so the smallest product surface carries the same signature rather than a generic display outline.
+- Add the brand-system rules for size reduction, semantic color use and cross-asset composition.
+
 ## 0.2.0 — DisplayDJ visual identity
 
 - Add the DisplayDJ application icon: a rounded display frame, vertical fader, brightness knob and restrained active cue, authored as a source SVG and packaged as an `.icns` bundle asset.

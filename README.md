@@ -18,6 +18,8 @@ DisplayDJ 将 **DisplayDJ 的菜单栏与外屏硬件引擎**，和 **VibeDispla
   <img src="Assets/DisplayDJIcon.svg" alt="DisplayDJ：显示器框架、垂直 fader 与亮度控制" width="160">
 </p>
 
+DisplayDJ 的视觉锚点是 **DJ Gate（校准通道）**：一条不对称的可恢复通道承载 fader 与状态 cue，而不是通用的显示器或太阳图标。完整尺寸和状态规则见[品牌系统](docs/BRAND.md)。
+
 ## 一个工具，三个入口
 
 | 入口 | 适合谁 | 已实现能力 |

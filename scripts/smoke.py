@@ -9,9 +9,9 @@ with tempfile.TemporaryDirectory(prefix='display-cli-smoke-') as directory:
         result = subprocess.run([str(binary), *args, '--json'], env=env, capture_output=True, text=True, timeout=30)
         assert result.returncode == expected, (args, result.returncode, result.stderr, result.stdout)
         return json.loads(result.stdout)
-    assert cli('version')['data']['version'] == '0.2.0'
+    assert cli('version')['data']['version'] == '0.2.1'
     legacy = subprocess.run([str(binary.with_name('displaydj')), '--version'], capture_output=True, text=True, timeout=10)
-    assert legacy.returncode == 0 and legacy.stdout.strip() == '0.2.0'
+    assert legacy.returncode == 0 and legacy.stdout.strip() == '0.2.1'
     assert cli('help')['ok']
     assert not cli('disconnect', expected=2)['ok']
     assert not cli('unknown-command', expected=2)['ok']
