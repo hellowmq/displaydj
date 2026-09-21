@@ -14,6 +14,7 @@ struct Arguments {
     private(set) var positionals: [String] = []
     private(set) var options: [String: String] = [:]
     private(set) var flags: Set<String> = []
+    private(set) var parseErrors: [String] = []
     /// Everything after a bare `--`, handed to `agent run` verbatim.
     private(set) var passthrough: [String] = []
 
@@ -22,7 +23,7 @@ struct Arguments {
     static let valueOptions: Set<String> = [
         "display", "d", "selector", "ramp", "ttl", "scope", "reason", "owner",
         "label", "client", "outcome", "note", "phase", "port", "host", "window",
-        "id", "config", "format", "timeout", "metadata", "beat", "on-fail"
+        "id", "config", "format", "timeout", "metadata", "beat", "on-fail", "lines", "max-duration"
     ]
 
     init(_ argv: [String]) {
@@ -41,9 +42,9 @@ struct Arguments {
             if token.hasPrefix("--") {
                 let body = String(token.dropFirst(2))
                 if let eq = body.firstIndex(of: "=") {
-                    options[String(body[body.startIndex..<eq])] = String(body[body.index(after: eq)...])
+                    recordOption(String(body[body.startIndex..<eq]), value: String(body[body.index(after: eq)...]))
                 } else if Self.valueOptions.contains(body) {
-                    options[body] = iterator.next() ?? ""
+                    recordOption(body, value: iterator.next() ?? "")
                 } else {
                     flags.insert(body)
                 }
@@ -52,7 +53,7 @@ struct Arguments {
             if token.hasPrefix("-"), token.count > 1, !token.dropFirst().allSatisfy({ $0.isNumber || $0 == "." || $0 == "%" }) {
                 let body = String(token.dropFirst())
                 if Self.valueOptions.contains(body) {
-                    options[body] = iterator.next() ?? ""
+                    recordOption(body, value: iterator.next() ?? "")
                 } else {
                     flags.insert(body)
                 }
@@ -60,6 +61,34 @@ struct Arguments {
             }
             positionals.append(token)
         }
+    }
+
+    private mutating func recordOption(_ name: String, value: String) {
+        if options[name] != nil { parseErrors.append("duplicate option --\(name)") }
+        if value.isEmpty || value.hasPrefix("--") { parseErrors.append("missing value for --\(name)") }
+        options[name] = value
+    }
+
+    func validateKnownOptions() throws {
+        if let error = parseErrors.first { throw VibeError(.invalidArgument, error) }
+        let knownFlags: Set<String> = ["json", "verbose", "v", "quiet", "q", "help", "h", "version", "V", "cached",
+            "dry-run", "replace", "require-ac", "ac-only", "all", "detach", "background", "bg", "no-token", "no-load", "force"]
+        for flag in flags where !knownFlags.contains(flag) { throw VibeError(.invalidArgument, "unknown flag --\(flag)") }
+        for key in options.keys where !Self.valueOptions.contains(key) { throw VibeError(.invalidArgument, "unknown value option --\(key)") }
+        for key in ["ramp", "ttl", "beat", "port", "lines", "max-duration", "timeout"] {
+            if let raw = options[key], Int(raw) == nil { throw VibeError(.invalidArgument, "--\(key) requires an integer") }
+        }
+        if let ramp = int("ramp"), !(0...60_000).contains(ramp) { throw VibeError(.invalidArgument, "--ramp must be 0…60000 ms") }
+        let selectors = ["display", "d", "selector"].filter { options[$0] != nil }
+        if selectors.count > 1 { throw VibeError(.invalidArgument, "use only one display selector option") }
+    }
+
+    func validateSurface(options allowedOptions: Set<String>, flags allowedFlags: Set<String> = [], maxPositionals: Int) throws {
+        try validateKnownOptions()
+        let globals: Set<String> = ["json", "verbose", "v", "quiet", "q", "help", "h"]
+        for key in options.keys where !allowedOptions.contains(key) { throw VibeError(.invalidArgument, "option --\(key) is not accepted by this command") }
+        for flag in flags where !allowedFlags.union(globals).contains(flag) { throw VibeError(.invalidArgument, "flag --\(flag) is not accepted by this command") }
+        guard positionals.count <= maxPositionals, passthrough.isEmpty else { throw VibeError(.invalidArgument, "unexpected trailing arguments") }
     }
 
     func positional(_ index: Int) -> String? {

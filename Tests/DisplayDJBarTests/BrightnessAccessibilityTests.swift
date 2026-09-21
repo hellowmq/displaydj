@@ -73,13 +73,11 @@ func accessibilityHintNeverPromisesARefusedStep() {
   #expect(refused != BrightnessAccessibility.sliderHint(for: .apply(from: 50)))
 }
 
-@Test("A refused step still points at the way back rather than reading as a dead control")
-func accessibilityHintKeepsAbsoluteTargetingDiscoverable() {
-  // PRD 2.4: a failed read must leave the user a route back, and on a track drawing no thumb
-  // that route is not discoverable unless it is spoken.
+@Test("A disabled slider describes the missing reading")
+func accessibilityHintExplainsUnknownBrightness() {
   let refused = BrightnessAccessibility.sliderHint(for: .unavailable)
   #expect(refused.trimmingCharacters(in: .whitespaces).isEmpty == false)
-  #expect(refused.contains("点按") || refused.contains("轨道"))
+  #expect(refused.contains("亮度尚未确认"))
 }
 
 @Test("The hint agrees with the step rule for every state of it")

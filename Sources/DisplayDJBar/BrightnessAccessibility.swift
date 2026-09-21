@@ -65,10 +65,7 @@ enum BrightnessAccessibility {
     case .apply:
       return "按左右方向键以 \(step)% 为步进调节"
     case .unavailable:
-      // Says what is unavailable *and* what still works. A failed read must not read as a dead
-      // control: naming an absolute position needs no baseline, and PRD 2.4 requires that path
-      // to stay open — but on a track with no visible thumb it is not discoverable otherwise.
-      return "当前无法用方向键调节，可直接点按轨道选择目标亮度"
+      return "亮度尚未确认，请稍候或重新读取"
     }
   }
 

@@ -48,11 +48,8 @@ enum SliderTrack: Equatable {
 
   /// Resolves what the control currently represents.
   ///
-  /// A drag always yields a position, whatever the hardware last reported: the finger is
-  /// naming an absolute place on the track, which is exactly the operation that needs no
-  /// baseline — and which PRD 2.4 requires to stay available, because it is the way back from
-  /// a failed read. Outside a drag the bound number is only meaningful if it came from a
-  /// reading; otherwise it is the `@State` default, and the default is not a measurement.
+  /// A drag yields the finger's position. The parent view disables gestures without a
+  /// reading; outside a drag the bound number is only meaningful if it came from a read.
   static func resolve(
     isDragging: Bool,
     dragValue: Double,
@@ -79,9 +76,8 @@ enum SliderTrack: Equatable {
   /// Whether the thumb has a position to sit at.
   ///
   /// Withheld when unknown. A thumb is a claim about where the value *is*, and parking it at
-  /// either end would substitute one fabricated number for another. The track itself stays
-  /// hit-testable, so clicking or dragging still names an absolute target — the recovery path
-  /// a failed read must not take away.
+  /// either end would substitute one fabricated number for another. A failed read is
+  /// recovered through the retry action once it has been confirmed.
   var showsThumb: Bool {
     switch self {
     case .position: true

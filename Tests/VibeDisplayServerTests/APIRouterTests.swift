@@ -97,10 +97,14 @@ final class APIRouterTests: XCTestCase {
             "POST /v1/agent/sessions/:id/heartbeat",
             "DELETE /v1/agent/sessions/:id",
             "POST /v1/panic-restore",
+            "GET /v1/controls/:control", "POST /v1/controls/:control",
+            "GET /v1/modes", "POST /v1/modes", "GET /v1/profiles",
+            "GET /v1/profiles/:name", "POST /v1/profiles/:name",
+            "DELETE /v1/profiles/:name", "POST /v1/profiles/:name/apply",
         ] {
             XCTAssertTrue(routes.contains(expected), "route table missing \(expected)")
         }
-        XCTAssertEqual(routes.count, 20, "route table should list exactly the 20 wired endpoints")
+        XCTAssertEqual(routes.count, 29, "route table should list exactly the 29 wired endpoints")
     }
 
     // MARK: - keep-awake (pure registry, no hardware)

@@ -1,5 +1,5 @@
 struct DDCBrightnessOperationSupport: Sendable {
-  private static let featureCode: UInt8 = 0x10
+  private let featureCode: UInt8
 
   private let discovery: any DisplayDiscovering
   private let selectorResolver: DisplaySelectorResolver
@@ -10,9 +10,11 @@ struct DDCBrightnessOperationSupport: Sendable {
     discovery: any DisplayDiscovering,
     selectorResolver: DisplaySelectorResolver = DisplaySelectorResolver(),
     backend: BackendKind,
-    operation: ControlOperation
+    operation: ControlOperation,
+    featureCode: UInt8 = 0x10
   ) {
     precondition(operation == .read || operation == .write)
+    self.featureCode = featureCode
     self.discovery = discovery
     self.selectorResolver = selectorResolver
     self.backend = backend
@@ -145,7 +147,7 @@ struct DDCBrightnessOperationSupport: Sendable {
     display: DisplayDescriptor
   ) throws {
     guard
-      rawValue.featureCode == Self.featureCode,
+      rawValue.featureCode == featureCode,
       rawValue.valueType == .setParameter,
       rawValue.maximumValue > 0,
       rawValue.currentValue <= rawValue.maximumValue

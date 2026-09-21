@@ -30,9 +30,7 @@ enum SliderStep: Equatable {
   /// number, so "no reading" had no representation and the drawn default stood in for it.
   ///
   /// Refusing is not a silent discard. The same absence makes the control announce its value
-  /// as unknown, so assistive technology states the reason, and absolute targeting — dragging
-  /// or clicking to a position — stays available as the way back. Only the relative step,
-  /// which genuinely has nothing to add to, declines.
+  /// as unknown, and the card disables the slider until a new reading succeeds.
   static func resolve(isEnabled: Bool, currentValue: Int?) -> SliderStep {
     guard isEnabled, let currentValue else { return .unavailable }
     return .apply(from: currentValue)

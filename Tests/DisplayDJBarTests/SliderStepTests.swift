@@ -4,10 +4,8 @@ import Testing
 
 // What a keyboard or VoiceOver step is allowed to do when no reading exists.
 //
-// The pointer and the keyboard ask different things of the slider. Clicking or dragging names
-// an absolute position, so it needs only a display that may be addressed. An arrow key names a
-// *change*, which requires something to change *from* — and that is missing precisely when a
-// read has failed, which is also when the user most wants to act.
+// A keyboard step requires a measured starting value. The card also disables pointer input
+// while the value is unknown, leaving an empty track until a read succeeds.
 //
 // The card's `±` buttons already made this distinction through `canAdjustRelatively`. The
 // slider was handed only `canControl`, so its keyboard path stepped from `sliderValue`: a
@@ -37,16 +35,6 @@ func stepUsesTheReadingAsItsBaseline() {
 }
 
 // MARK: - Guards against over-correction
-
-@Test("Absolute control stays available when relative stepping is refused")
-func absoluteControlSurvivesAMissingReading() {
-  // PRD 2.4: a failed read must not disable the user's only way back. The step declines, but
-  // the display is still controllable — dragging and the presets name absolute targets and
-  // need no baseline, so they remain the route out of a failed read.
-  let canControl = true
-  #expect(SliderStep.resolve(isEnabled: canControl, currentValue: nil) == .unavailable)
-  #expect(canControl)
-}
 
 @Test("The baseline is never fabricated from the slider's drawn position")
 func stepNeverInventsABaseline() {

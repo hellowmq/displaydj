@@ -89,7 +89,9 @@ public enum DisplaySelector: Equatable, Sendable {
             return [hit]
         case .uuid(let u):
             let needle = u.lowercased()
-            guard let hit = displays.first(where: { $0.uuid.lowercased() == needle }) else {
+            let matches = displays.filter { $0.uuid.lowercased() == needle }
+            if matches.count > 1 { throw Self.ambiguous(u, matches) }
+            guard let hit = matches.first else {
                 throw VibeError(.displayNotFound, "no display with uuid \(u)")
             }
             return [hit]
@@ -101,8 +103,13 @@ public enum DisplaySelector: Equatable, Sendable {
     private func resolveToken(_ token: String, in displays: [DisplayInfo]) throws -> [DisplayInfo] {
         let needle = token.lowercased()
 
-        if let exact = displays.first(where: { $0.slug.lowercased() == needle }) { return [exact] }
-        if let exact = displays.first(where: { $0.name.lowercased() == needle }) { return [exact] }
+        guard !needle.isEmpty else { throw VibeError(.invalidArgument, "display selector must not be empty") }
+        let slugs = displays.filter { $0.slug.lowercased() == needle }
+        if slugs.count == 1 { return slugs }
+        if slugs.count > 1 { throw Self.ambiguous(token, slugs) }
+        let names = displays.filter { $0.name.lowercased() == needle }
+        if names.count == 1 { return names }
+        if names.count > 1 { throw Self.ambiguous(token, names) }
 
         let prefix = displays.filter { $0.slug.lowercased().hasPrefix(needle) || $0.name.lowercased().hasPrefix(needle) }
         if prefix.count == 1 { return prefix }

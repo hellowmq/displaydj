@@ -83,5 +83,6 @@ NSApplication.shared.mainMenu = mainMenu
 
 let controller = DisplayBarController()
 controller.setup()
+if CommandLine.arguments.contains("--display-tools") { controller.showDisplayTools() }
 
 app.run()

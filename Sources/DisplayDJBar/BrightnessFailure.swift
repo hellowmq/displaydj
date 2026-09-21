@@ -234,14 +234,14 @@ enum BrightnessFailurePresenter {
       ?? appWording(for: code, operation: operation)
   }
 
-  /// Failures about *which* display is being addressed. The user fixes these by changing
-  /// what is plugged in, not by pressing the same button again.
+  /// Failures about *which* display is being addressed. A wake transition can briefly make
+  /// even a built-in panel unavailable, so the wording does not infer a disconnection.
   private static func identityWording(for code: DisplayDJErrorCode) -> Wording? {
     switch code {
     case .displayNotFound:
       return Wording(
-        summary: "找不到这台显示器",
-        suggestion: "它可能已被拔掉或进入了休眠。请重新扫描。",
+        summary: "暂时无法定位这台显示器",
+        suggestion: "请稍候重新扫描；若反复出现，再检查显示器连接状态。",
         way: .rescan
       )
     case .ambiguousDisplay:

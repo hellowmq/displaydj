@@ -155,9 +155,11 @@ public final class BrightnessService {
 
     public func read(_ selector: DisplaySelector) throws -> [BrightnessReading] {
         let targets = try selector.resolve(in: registry.displays())
-        return targets.compactMap { display in
+        return try targets.map { display in
             let backend = backend(for: display)
-            guard let value = backend.read(display) else { return nil }
+            guard let value = backend.read(display) else {
+                throw VibeError(.backendFailure, "cannot read brightness for \(display.slug) via \(backend.transport.rawValue)")
+            }
             return BrightnessReading(displayUUID: display.uuid,
                                      slug: display.slug,
                                      value: value,
@@ -184,9 +186,18 @@ public final class BrightnessService {
 
     public func apply(_ target: BrightnessTarget,
                       to display: DisplayInfo,
-                      ramp: BrightnessRamp = .instant) -> BrightnessApplyResult {
+                      ramp: BrightnessRamp = .instant,
+                      expectedTransport: BrightnessTransport? = nil) -> BrightnessApplyResult {
         let backend = backend(for: display)
+        if let expectedTransport, backend.transport != expectedTransport {
+            return BrightnessApplyResult(displayUUID: display.uuid, slug: display.slug, requested: 0, applied: nil,
+                                         transport: backend.transport, ok: false, error: "transport changed before write")
+        }
         let current = backend.read(display)
+        guard let current else {
+            return BrightnessApplyResult(displayUUID: display.uuid, slug: display.slug, requested: 0, applied: nil,
+                                         transport: backend.transport, ok: false, error: "cannot read a trustworthy baseline")
+        }
 
         // Invariant: snapshot before the first mutation. A direct `brightness
         // set` outside any agent session must still be restorable, so the
@@ -196,7 +207,7 @@ public final class BrightnessService {
         var snapshotTaken = false
         if case .restoreSnapshot = target {
             snapshotTaken = false
-        } else if let current {
+        } else {
             snapshotTaken = recordSnapshotIfNeeded(display, current: current)
         }
 
@@ -205,7 +216,7 @@ public final class BrightnessService {
         case .absolute(let v):
             requested = v.clampedBrightness
         case .relative(let delta):
-            let base = current ?? 0.5
+            let base = current
             requested = (base + delta).clampedBrightness
         case .restoreSnapshot:
             lock.lock()
@@ -213,15 +224,18 @@ public final class BrightnessService {
             lock.unlock()
             guard let saved else {
                 return BrightnessApplyResult(displayUUID: display.uuid, slug: display.slug,
-                                             previous: current, requested: current ?? 0, applied: current,
+                                             previous: current, requested: current, applied: current,
                                              transport: backend.transport, ok: false,
                                              error: "no snapshot recorded for this display")
             }
             requested = saved
         }
 
-        let ok = performWrite(backend: backend, display: display,
+        let wrote = performWrite(backend: backend, display: display,
                               from: current, to: requested, ramp: ramp)
+
+        let observed = wrote ? backend.read(display) : nil
+        let ok = wrote && observed != nil
 
         if ok, case .restoreSnapshot = target {
             lock.lock()
@@ -236,7 +250,7 @@ public final class BrightnessService {
             slug: display.slug,
             previous: current,
             requested: requested,
-            applied: ok ? (backend.read(display) ?? requested) : current,
+            applied: observed,
             transport: backend.transport,
             ok: ok,
             snapshotTaken: snapshotTaken,

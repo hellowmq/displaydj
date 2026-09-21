@@ -6,7 +6,7 @@ import VibeDisplayCore
 let argv = Array(CommandLine.arguments.dropFirst())
 let args = Arguments(argv)
 
-Output.json = args.has("json")
+Output.json = args.has("json") || argv.prefix(while: { $0 != "--" }).contains("--json")
 Log.jsonMode = Output.json
 if args.has("verbose", "v") {
     Log.minimumLevel = .debug
@@ -30,9 +30,22 @@ guard let command = args.positional(0), !args.has("help", "h") else {
 }
 
 do {
+    try args.validateKnownOptions()
+    if args.has("dry-run"), !["contrast", "volume", "modes", "profile", "profiles"].contains(command) {
+        throw VibeError(.invalidArgument, "--dry-run is supported for contrast, volume, modes and profile apply")
+    }
     switch command {
     case "displays", "list", "ls":
         try DisplayCommands.list(args)
+
+    case "contrast", "volume":
+        try ControlCommands.run(args, control: MonitorControl(rawValue: command)!)
+
+    case "modes":
+        try ModeCommands.run(args)
+
+    case "profile", "profiles":
+        try ProfileCommands.run(args)
 
     case "connect", "disconnect":
         try ConnectionCommands.run(args, connected: command == "connect")

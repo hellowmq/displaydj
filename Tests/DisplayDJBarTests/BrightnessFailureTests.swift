@@ -109,6 +109,15 @@ func missingDisplayOffersRescan() {
     ).recovery == .rescan)
 }
 
+@Test("A missing reading does not claim a display was unplugged")
+func missingDisplayWordingIsNeutral() {
+  let error = DisplayDJError(code: .displayNotFound, message: "no such display")
+  let failure = BrightnessFailurePresenter.failure(
+    for: error, operation: .read(displayStableID: hpDisplay))
+  #expect(!failure.summary.contains("断开"))
+  #expect(!failure.suggestion.contains("拔掉"))
+}
+
 @Test("Situations the user cannot retry out of are marked as such")
 func unrecoverableSituationsDoNotPretendToBeRetryable() {
   let ambiguous = DisplayDJError(code: .ambiguousDisplay, message: "two identical displays")

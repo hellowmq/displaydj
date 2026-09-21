@@ -12,11 +12,9 @@ struct BrightnessSlider: View {
   /// Whether `value` reflects a brightness the hardware actually reported.
   ///
   /// The bound `Double` cannot say this on its own: it is `@State` in the owning card, it
-  /// starts at an arbitrary 50, and it is only ever synced *from* a reading that exists. So a
-  /// display whose read failed renders identically to one sitting at 50%, and the control had
-  /// no way to tell the two apart. The pointer does not care — clicking names an absolute
-  /// position — but a keyboard or VoiceOver step has to add to something, and adding to the
-  /// placeholder sends a number nothing measured to the display.
+  /// has a fallback before the first reading and is only synced from a real reading.
+  /// The card disables this slider while the value is unknown; this flag also prevents
+  /// the track or keyboard path from treating the fallback as a measured brightness.
   let hasReading: Bool
   @Binding var isDragging: Bool
   /// Fires continuously during a drag so the hardware can start converging before
@@ -24,7 +22,7 @@ struct BrightnessSlider: View {
   var onDragChanged: ((Int) -> Void)?
   let onCommit: (Int) -> Void
 
-  @State private var dragValue: Double = 50
+  @State private var dragValue: Double = 0
   @FocusState private var isFocused: Bool
 
   // The geometry lives in `BrightnessSliderMetrics`. It is the part of this view that R2
@@ -37,7 +35,7 @@ struct BrightnessSlider: View {
   /// One value answers both because they are one question. Resolving them separately is how
   /// the track came to paint a half-filled bar and a mid-way thumb on a display whose read had
   /// failed, while the readout beside it showed `--`, VoiceOver said未知 and the `±` buttons
-  /// were disabled: the geometry read the raw `Double`, which defaults to 50 and is onlyever
+  /// were disabled: the geometry read the raw `Double`, which had a fallback and is only ever
   /// synced from readings that exist, so the absence of a reading left the last drawn position
   /// standing rather than clearing it.
   private var trackState: SliderTrack {
@@ -171,9 +169,8 @@ struct BrightnessSlider: View {
   /// Withheld rather than parked at an end when no reading exists. The thumb is the control's
   /// assertion of *where the value is*, and on a display whose read failed there is no such
   /// place — putting it at 0 would state a brightness as confidently as putting it at 50 did.
-  /// The track underneath stays hit-testable either way, so clicking or dragging to an
-  /// absolute position remains available; PRD 2.4 requires that a failed read leave the user
-  /// a way back, and that is it.
+  /// The card disables the slider until it has a reading. Repeated read failures offer a
+  /// separate retry action on the card.
   ///
   /// A drag bubble used to hang off this circle, showing the live value in a dark capsule. It
   /// was removed for two reasons, the second stronger than the first. It duplicated the card

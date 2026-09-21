@@ -36,6 +36,7 @@ extension DisplayBarController {
     for id in Array(intendedByID.keys) where !liveIDs.contains(id) {
       setIntendedForDisplay(nil, id: id)
     }
+    readFailureCounts = readFailureCounts.filter { liveIDs.contains($0.key) }
     // A detached display's banner has no card left to live on, but every attached
     // display's banner is still true and must survive the rescan.
     failures.prune(keeping: liveBannerKeys)

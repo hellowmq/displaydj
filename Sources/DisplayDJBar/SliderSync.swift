@@ -1,7 +1,7 @@
 /// When the card's slider adopts the display's reading — including the very first time.
 ///
-/// The card renders its slider from a `@State Double` that starts at an arbitrary 50, and the
-/// only thing that ever moved it off that default was `.onChange(of: displayedBrightness)`.
+/// The card renders its slider from a `@State Double` initialised from the controller's
+/// reading when available. `.onChange(of: displayedBrightness)` keeps it current afterward.
 /// `onChange` is a *difference* channel: it fires when the value changes while the view is
 /// alive, and it does not fire for the value that was already there when the view appeared.
 /// So the slider had a rule for staying in step and no rule for starting in step.
@@ -9,19 +9,16 @@
 /// That gap is not hypothetical, because the reading routinely predates the card:
 ///
 /// * The popover is `.transient`. Closing it tears the SwiftUI content down, and reopening
-///   builds fresh `DisplayCard`s whose `@State` is 50 again — while `brightnessByID` survives
-///   untouched, since nothing clears readings on close. `displayedBrightness` is therefore the
-///   same number it was before, `onChange` sees no change, and the slider stays at 50.
+///   builds fresh `DisplayCard`s while `brightnessByID` survives untouched. The card now
+///   initialises its state from that reading; this appearance rule still covers a reading
+///   that changes between construction and appearance.
 /// * A hotkey pressed before the popover was ever opened runs `refreshSelectedDisplayOnDemand`,
 ///   which enumerates and reads. By the time the user opens the popover, the reading is already
 ///   in hand and the card is created after it.
 ///
-/// In both cases the card contradicts itself in the open: the readout shows the real value, the
-/// `±` buttons are enabled because a reading exists, VoiceOver speaks the real value — and the
-/// largest element on the card draws a track filled to 50 with the thumb parked there. Worse
-/// than cosmetic, for the reason round 37 established about the track: the fill is the
-/// reference the next gesture is judged against, and `steppableValue` reads from the same
-/// resolved position, so an arrow key steps from 50 rather than from what the display reported.
+/// Before the initialisation fix, the readout could show the real value while the track drew
+/// 50 for its first frame. The appearance rule remains useful as a safety net; the initial
+/// state now prevents the visual mismatch before that callback runs.
 ///
 /// It cannot heal on its own while the popover is shut, and once open it heals only if the
 /// hardware happens to report a *different* number — a display sitting at a stable brightness

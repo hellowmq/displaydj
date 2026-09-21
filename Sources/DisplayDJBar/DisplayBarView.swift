@@ -53,7 +53,9 @@ struct DisplayBarView: View {
       }
 
       Divider().padding(.vertical, 8)
-      AgentServiceView()
+      Button("显示设置与预设…") { controller.showDisplayTools() }
+        .font(.system(size: 11))
+        .padding(.bottom, 8)
       HotkeySettingsRow(controller: controller)
     }
     .padding(.horizontal, 12)
@@ -192,8 +194,17 @@ private struct DisplayCard: View {
   /// environment) because `EditMode` is unavailable on macOS.
   let isEditing: Bool
 
-  @State private var sliderValue: Double = 50
+  @State private var sliderValue: Double
   @State private var isDragging = false
+
+  init(display: DisplayDescriptor, controller: DisplayBarController, isEditing: Bool) {
+    self.display = display
+    self.controller = controller
+    self.isEditing = isEditing
+    // A transient popover rebuilds its cards on every open. Start from the reading already
+    // held by the controller so the first frame cannot briefly draw an invented 50%.
+    _sliderValue = State(initialValue: Double(controller.displayedBrightness(for: display.stableID ?? "") ?? 0))
+  }
 
   private var stableID: String { display.stableID ?? "" }
   /// The name shown on the card: the user's alias when set, else the system name.
@@ -283,10 +294,9 @@ private struct DisplayCard: View {
       // the width with, and a track that spans the card states the one thing this card is for.
       BrightnessSlider(
         value: $sliderValue,
-        isEnabled: canControl,
-        // A relative step needs a starting point, and `sliderValue` is a `@State` that defaults
-        // to 50 — so without this the slider's keyboard path stepped from a number no read ever
-        // produced. After R2 this is also the only relative path left on the card.
+        isEnabled: canAdjustRelatively,
+        // A relative step needs a real reading. The local state has a harmless zero fallback
+        // before the first read, but it must never become a keyboard or VoiceOver baseline.
         hasReading: canAdjustRelatively,
         isDragging: $isDragging,
         onDragChanged: { intValue in
@@ -296,7 +306,7 @@ private struct DisplayCard: View {
           Task { await controller.setBrightness(intValue, for: stableID) }
         }
       )
-      .disabled(!canControl || isEditing)
+      .disabled(!canAdjustRelatively || isEditing)
 
       // This display's own failure, drawn on this display's card. A single shared strip at
       // the bottom could not say which monitor it was about, and could only ever show one.
@@ -330,13 +340,9 @@ private struct DisplayCard: View {
         selectThisDisplay()
       }
     }
-    // Both occasions go through `SliderSync`, and the appearing one exists at all because
-    // `onChange` alone could not cover it. `onChange` reports differences, so it says nothing
-    // about the value a card is *born* holding — and the reading routinely predates the card:
-    // the popover is `.transient`, so every reopen builds fresh `@State` at 50 while
-    // `brightnessByID` survives, and a hotkey pressed before the popover was ever opened fills
-    // the reading in first. The slider then drew 50 beside a readout showing the real value,
-    // and stepped from50 too, with no way to heal unless the hardware happened to change.
+    // Keep the appearance sync as a safety net if the reading changes between initialisation
+    // and appearance. The initial state above handles the first frame; onChange handles later
+    // reads without replacing an active drag.
     .onAppear {
       applySync(reading: displayedBrightness, occasion: .cardAppeared)
     }

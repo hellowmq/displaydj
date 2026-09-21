@@ -8,7 +8,8 @@
 /// best-effort Set back to the exact baseline raw value plus read-back before the
 /// original failure is returned.
 struct DDCBrightnessWriter: Sendable {
-  private static let brightnessFeatureCode: UInt8 = 0x10
+  private let featureCode: UInt8
+  private let control: DisplayControl
 
   private let support: DDCBrightnessOperationSupport
   private let backend: BackendKind
@@ -20,13 +21,18 @@ struct DDCBrightnessWriter: Sendable {
     selectorResolver: DisplaySelectorResolver = DisplaySelectorResolver(),
     backend: BackendKind,
     serviceMatcher: any DDCServiceMatching,
-    executor: DDCVCPExecutor
+    executor: DDCVCPExecutor,
+    featureCode: UInt8 = 0x10,
+    control: DisplayControl = .brightness
   ) {
+    self.featureCode = featureCode
+    self.control = control
     support = DDCBrightnessOperationSupport(
       discovery: discovery,
       selectorResolver: selectorResolver,
       backend: backend,
-      operation: .write
+      operation: .write,
+      featureCode: featureCode
     )
     self.backend = backend
     self.serviceMatcher = serviceMatcher
@@ -35,25 +41,27 @@ struct DDCBrightnessWriter: Sendable {
 
   func write(
     _ value: DisplayControlValue,
-    to selector: DisplaySelector
+    to selector: DisplaySelector,
+    relativeDelta: Double? = nil
   ) async throws -> ControlWriteResult {
     let preparation = try await prepareWrite(to: selector)
     let target = try await preparation.session.transportTarget(
-      Self.brightnessFeatureCode,
+      featureCode,
       for: preparation.display,
       operation: .write
     )
     let rawResult = try await performWrite(
       value,
       target: target,
-      preparation: preparation
+      preparation: preparation,
+      relativeDelta: relativeDelta
     )
 
     return ControlWriteResult(
       display: preparation.display,
       backend: backend,
-      control: .brightness,
-      requestedValue: value,
+      control: control,
+      requestedValue: relativeDelta == nil ? value : try DisplayControlValue(normalized: Double(rawResult.requestedRawValue) / Double(rawResult.baselineValue.maximumValue)),
       appliedValue: try support.brightnessValue(
         from: rawResult.verifiedValue,
         display: preparation.display
@@ -95,15 +103,23 @@ struct DDCBrightnessWriter: Sendable {
   private func performWrite(
     _ value: DisplayControlValue,
     target: DDCTransportTarget,
-    preparation: DDCBrightnessWritePreparation
+    preparation: DDCBrightnessWritePreparation,
+    relativeDelta: Double?
   ) async throws -> DDCVCPFeatureWriteResult {
     let support = support
     return try await executor.setFeatureUsingBaseline(
-      Self.brightnessFeatureCode,
+      featureCode,
       on: target,
       rawValue: { baseline in
-        try support.rawBrightnessValue(
-          for: value,
+        let requested: DisplayControlValue
+        if let relativeDelta {
+          let current = try support.brightnessValue(from: baseline, display: preparation.display)
+          requested = try DisplayControlValue(normalized: min(1, max(0, current.normalized + relativeDelta)))
+        } else {
+          requested = value
+        }
+        return try support.rawBrightnessValue(
+          for: requested,
           baseline: baseline,
           display: preparation.display
         )

@@ -147,6 +147,46 @@ struct DisplayBrightnessAccessTests {
     #expect(controller.intendedByID.isEmpty)
   }
 
+  @Test func transientReadFailureStaysNeutralUntilNextRead() async {
+    let backend = NativeBackendStub()
+    backend.value = nil
+    let controller = DisplayBarController()
+    controller.displayDiscovery = BrightnessDiscovery(displays: [panel(true)])
+    controller.brightnessAccess = access(backend, displays: [panel(true)])
+    await controller.scanAndRefresh()
+
+    await controller.refreshDisplay(stableID: internalID, trigger: .userRequest)
+    #expect(controller.displayedBrightness(for: internalID) == nil)
+    #expect(controller.failure(for: internalID) == nil)
+    #expect(controller.readFailureCounts[internalID] == 1)
+    #expect(!controller.canAdjustRelatively(internalID))
+
+    backend.value = 0.43
+    await controller.refreshDisplay(stableID: internalID, trigger: .userRequest)
+    #expect(controller.displayedBrightness(for: internalID) == 43)
+    #expect(controller.failure(for: internalID) == nil)
+    #expect(controller.readFailureCounts[internalID] == nil)
+
+    controller.invalidateBrightnessAfterWake()
+    #expect(controller.displayedBrightness(for: internalID) == nil)
+    #expect(!controller.canAdjustRelatively(internalID))
+    #expect(backend.writes.isEmpty)
+  }
+
+  @Test func repeatedReadFailureShowsRecovery() async {
+    let backend = NativeBackendStub()
+    backend.value = nil
+    let controller = DisplayBarController()
+    controller.displayDiscovery = BrightnessDiscovery(displays: [panel(true)])
+    controller.brightnessAccess = access(backend, displays: [panel(true)])
+    await controller.scanAndRefresh()
+
+    await controller.refreshDisplay(stableID: internalID, trigger: .userRequest)
+    #expect(controller.failure(for: internalID) == nil)
+    await controller.refreshDisplay(stableID: internalID, trigger: .userRequest)
+    #expect(controller.failure(for: internalID)?.recovery == .retryRead(displayStableID: internalID))
+  }
+
   @Test func visiblePanelsIncludeBuiltInButExcludeMirrorsAndVirtualDisplays() {
     #expect(DisplayBrightnessAccess.visibleDisplays([
       panel(true), panel(false), panel(true, mirrored: true), panel(false, virtual: true)

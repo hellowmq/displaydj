@@ -16,6 +16,14 @@ enum Help {
       connect --display uuid:X          reconnect a display
       disconnect --display uuid:X       disconnect one display (never the last online display)
       capabilities                      report available brightness transports
+      contrast get | set <value>        DDC contrast; set requires --display
+      volume get | set <value>          DDC monitor speaker volume; set requires --display
+      modes list                       resolutions, refresh rates, HiDPI and current mode
+      modes set <mode-id>              apply an available mode; requires --display
+      profile list | show <name>       inspect saved brightness presets
+      profile save <name>              capture brightness by UUID + transport (--replace to overwrite)
+      profile apply <name>             preflight all displays, apply, roll back on failure
+      profile delete <name>            delete one named preset
 
     AGENT LIFECYCLE
       agent run [opts] -- <cmd...>      run a command with the full lifecycle managed
@@ -47,6 +55,7 @@ enum Help {
 
     OPTIONS
       --display, -d <selector>   all | builtin | external | main | #0 | id:N | uuid:X | <slug>
+      --dry-run                 preview contrast/volume/mode/profile changes without writes
       --ramp <ms>                fade duration for a brightness change
       --ttl <seconds>            session / lease time-to-live
       --beat <seconds>           heartbeat interval for `agent run` (default 30)

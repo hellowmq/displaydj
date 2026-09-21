@@ -46,6 +46,7 @@ enum DisplayCommands {
 
     static func brightness(_ args: Arguments) throws {
         let sub = args.positional(1) ?? "get"
+        try args.validateSurface(options: sub == "set" || sub == "apply" ? ["display", "d", "selector", "ramp"] : (sub == "restore" ? [] : ["display", "d", "selector"]), maxPositionals: sub == "restore" ? 2 : 3)
         switch sub {
         case "get", "read", "show":
             try get(args)

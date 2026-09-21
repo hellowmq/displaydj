@@ -6,7 +6,8 @@
 /// cannot detect an A-to-B-to-A reconfiguration between reads; a monotonic
 /// reconfiguration epoch remains a reliability follow-up.
 struct DDCBrightnessReader: Sendable {
-  private static let brightnessFeatureCode: UInt8 = 0x10
+  private let featureCode: UInt8
+  private let control: DisplayControl
 
   private let support: DDCBrightnessOperationSupport
   private let backend: BackendKind
@@ -18,13 +19,18 @@ struct DDCBrightnessReader: Sendable {
     selectorResolver: DisplaySelectorResolver = DisplaySelectorResolver(),
     backend: BackendKind,
     serviceMatcher: any DDCServiceMatching,
-    executor: DDCVCPExecutor
+    executor: DDCVCPExecutor,
+    featureCode: UInt8 = 0x10,
+    control: DisplayControl = .brightness
   ) {
+    self.featureCode = featureCode
+    self.control = control
     support = DDCBrightnessOperationSupport(
       discovery: discovery,
       selectorResolver: selectorResolver,
       backend: backend,
-      operation: .read
+      operation: .read,
+      featureCode: featureCode
     )
     self.backend = backend
     self.serviceMatcher = serviceMatcher
@@ -56,7 +62,7 @@ struct DDCBrightnessReader: Sendable {
     )
 
     let rawValue = try await session.getFeature(
-      Self.brightnessFeatureCode,
+      featureCode,
       from: display
     )
     try Task.checkCancellation()
@@ -74,7 +80,7 @@ struct DDCBrightnessReader: Sendable {
     return ControlReadResult(
       display: display,
       backend: backend,
-      control: .brightness,
+      control: control,
       value: try support.brightnessValue(from: rawValue, display: display)
     )
   }

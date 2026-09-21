@@ -4,10 +4,8 @@ import Testing
 
 /// Which controls stay usable when a reading is missing.
 ///
-/// This is the rule PRD 2.4 cares about: a failed read must not disable the user's only way
-/// back. Absolute targets (slider, presets) therefore stay live off identity alone, while
-/// relative `±` steps — which have nothing to add to — must report themselves unavailable
-/// rather than look enabled and quietly do nothing.
+/// A card whose brightness is unknown shows an empty track and disables it until a read
+/// succeeds. A repeated read failure offers the explicit retry action instead.
 ///
 /// The arithmetic is duplicated here deliberately: it mirrors the controller's rule without
 /// needing a `@MainActor` controller and a live display topology, so a refactor that drops
@@ -29,11 +27,10 @@ func availabilityRequiresStableIdentity() {
   #expect(canControl(stableID: realDisplay))
 }
 
-@Test("A failed read leaves absolute control available so the user can still recover")
-func availabilityKeepsAbsoluteControlAfterFailedRead() {
-  // No reading: the slider and the presets must remain usable.
+@Test("A missing reading disables the visible slider")
+func availabilityDisablesSliderAfterFailedRead() {
+  // Identity still permits addressed writes elsewhere, but the card slider waits for a read.
   #expect(canControl(stableID: realDisplay))
-  // ...but a relative step has no starting point to add to.
   #expect(canAdjustRelatively(stableID: realDisplay, reading: nil) == false)
 }
 

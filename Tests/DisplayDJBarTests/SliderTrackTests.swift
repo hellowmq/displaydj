@@ -79,8 +79,8 @@ func readingIsDrawnWhereItSays() {
 
 @Test("A drag draws the finger's position even with no reading")
 func dragOutranksAMissingReading() {
-  // PRD 2.4: a failed read must not remove the way back. Dragging names an absolute position,
-  // which needs no baseline, so it must keep drawing and keep stepping while a read is absent.
+  // Geometry still follows a drag if one is already active; the card prevents a new drag
+  // while the reading is unknown.
   let resolved = SliderTrack.resolve(
     isDragging: true,
     dragValue: 72,

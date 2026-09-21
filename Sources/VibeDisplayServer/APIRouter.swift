@@ -11,7 +11,9 @@ public enum APIRouter {
     public static func make(brightness: BrightnessService = .shared,
                             keepAwake: KeepAwakeRegistry = .shared,
                             sessions: AgentSessionManager = .shared,
-                            startedAt: Date) -> Router {
+                            startedAt: Date,
+                            controls: MonitorControlService = .shared, modes: DisplayModeService = .shared,
+                            profileStore: DisplayProfileStore = .shared, profileService: DisplayProfileService? = nil) -> Router {
         let router = Router()
 
         // MARK: service
@@ -185,6 +187,8 @@ public enum APIRouter {
             .ok(ApplyPayload(results: sessions.panicRestore()))
         }
 
+        DisplayControlRoutes.register(on: router, brightness: brightness, controls: controls, modes: modes,
+                                     profiles: profileService ?? DisplayProfileService(brightness: brightness, store: profileStore, allowsGamma: true), store: profileStore)
         return router
     }
 }

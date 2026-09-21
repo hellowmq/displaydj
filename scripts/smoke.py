@@ -9,9 +9,9 @@ with tempfile.TemporaryDirectory(prefix='display-cli-smoke-') as directory:
         result = subprocess.run([str(binary), *args, '--json'], env=env, capture_output=True, text=True, timeout=30)
         assert result.returncode == expected, (args, result.returncode, result.stderr, result.stdout)
         return json.loads(result.stdout)
-    assert cli('version')['data']['version'] == '0.2.3'
+    assert cli('version')['data']['version'] == '0.3.0'
     legacy = subprocess.run([str(binary.with_name('displaydj')), '--version'], capture_output=True, text=True, timeout=10)
-    assert legacy.returncode == 0 and legacy.stdout.strip() == '0.2.3'
+    assert legacy.returncode == 0 and legacy.stdout.strip() == '0.3.0'
     assert cli('help')['ok']
     assert not cli('disconnect', expected=2)['ok']
     assert not cli('unknown-command', expected=2)['ok']
@@ -20,7 +20,41 @@ with tempfile.TemporaryDirectory(prefix='display-cli-smoke-') as directory:
     assert not cli('serve', '--port', '-1', expected=2)['ok']
     assert cli('displays')['ok']
     assert cli('doctor')['data']['ddcEngine'].startswith('DisplayDJCore')
-    print('PASS CLI version, help, error contracts, display discovery and capabilities')
+    for args in [
+        ('volume', 'set', '50%'),
+        ('contrast', 'set', 'restore', '--display', 'external'),
+        ('volume', 'set', '50%', '--dispaly', 'external'),
+        ('brightness', 'set', '50%', '--dry-run'),
+        ('disconnect', '--display', 'main', '--dry-run'),
+        ('modes', 'set', 'bogus', '--display', 'main'),
+        ('modes', 'list', '--dry-run'),
+        ('profile', 'save', '../bad'),
+        ('profile', 'apply', 'work', '--dry-run=false'),
+        ('modes', 'list', '--display'),
+        ('modes', 'list', '--display', 'main', '--display', 'all'),
+        ('brightness', 'set', '50%', '--ramp', 'oops'),
+    ]:
+        assert not cli(*args, expected=2)['ok'], args
+    assert cli('profile', 'list')['data']['profiles'] == []
+    mode_reports = cli('modes', 'list')['data']['displays']
+    if mode_reports:
+        report = mode_reports[0]
+        preview = cli('modes', 'set', str(report['current']['id']), '--display', 'uuid:' + report['displayUUID'], '--dry-run')['data']
+        assert preview['dryRun'] and not preview['verified']
+        assert 'hiDPI' in preview['requested']
+    # A synthetic offline preset checks persistence and missing-display failure
+    # without changing physical brightness, volume or display configuration.
+    profile_path = pathlib.Path(directory) / 'profiles.json'
+    profile_path.write_text(json.dumps({'version': 1, 'profiles': [{
+        'name': 'offline-test', 'savedAt': '2026-09-21T00:00:00Z', 'displays': [{
+            'displayUUID': '00000000-0000-0000-0000-000000000001',
+            'name': 'Offline fixture', 'brightness': 0.5, 'transport': 'ddc'
+        }]
+    }]}))
+    assert cli('profile', 'show', 'offline-test')['data']['name'] == 'offline-test'
+    assert not cli('profile', 'apply', 'offline-test', '--dry-run', expected=3)['ok']
+    assert cli('profile', 'delete', 'offline-test')['data']['deleted'] == 'offline-test'
+    print('PASS CLI contracts, strict arguments, display modes/dry-run and isolated profiles')
     process = subprocess.Popen([str(binary), 'serve', '--port', '0'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     try:
         descriptor_path = pathlib.Path(directory) / 'daemon.json'
@@ -45,6 +79,12 @@ with tempfile.TemporaryDirectory(prefix='display-cli-smoke-') as directory:
         assert health['ok'] and health['data']['activeSessions'] == 0
         assert request('/v1/displays')['ok']
         assert request('/v1/agent/sessions')['ok']
+        assert request('/v1/modes')['ok']
+        assert request('/v1/profiles')['data']['profiles'] == []
+        assert cli('modes', 'list')['ok']
+        assert cli('profile', 'list')['data']['profiles'] == []
+        routes = request('/v1')['data']['routes']
+        assert 'POST /v1/controls/:control' in routes and 'POST /v1/profiles/:name/apply' in routes
         assert cli('daemon', 'status')['ok']
         print('PASS isolated daemon startup, token authentication, health, display and session routes')
     finally:

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 — Preview
+
+- 新增 DDC 对比度/显示器音量服务、CLI 与 HTTP；继承读回验证、相对变更事务及失败恢复。
+- 新增系统显示模式枚举、HiDPI/刷新率、预演与 session 模式切换。
+- 新增按 UUID 和 transport 保存的亮度预设、存储锁、全量预检和失败回退。
+- 菜单栏新增“显示设置与预设”窗口，调用内置主 CLI。
+- 加强参数拒绝与选择器歧义检查；亮度基线/回读失败不再猜测结果。
+- 菜单栏移除 Agent 服务入口；README 分开说明 App、独立 CLI 与可选后台服务。
+- 唤醒后亮度未确认时显示灰色空轨道并禁用滑块；首次读取失败保持中性状态，重复失败才显示重试入口。
+- 补充竞品追赶计划、接口文档、回归测试与本地运行入口。新硬件写入与 GUI 新窗口的验收边界见 VALIDATION；此版本未签名公证。
+
+
 ## 0.2.3 — Brand cyan controls
 
 - Replace the legacy amber brightness fill with Spectral Cyan (`#55D9FF`).

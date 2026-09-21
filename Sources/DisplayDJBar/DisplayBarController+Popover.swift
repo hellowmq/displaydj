@@ -53,6 +53,14 @@ extension DisplayBarController {
     // Polling is started only when the popover becomes visible (see NSPopoverDelegate).
 
     observeStatusItemInputs()
+    for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
+      let observer = NSWorkspace.shared.notificationCenter.addObserver(
+        forName: name, object: nil, queue: .main
+      ) { [weak self] _ in
+        Task { @MainActor [weak self] in self?.invalidateBrightnessAfterWake() }
+      }
+      wakeObservers.append(observer)
+    }
     startConnectionAutoRelease()
     // Whether disconnecting is possible at all is settled here rather than on
     // first use: it never changes while the app runs, and discovering it late

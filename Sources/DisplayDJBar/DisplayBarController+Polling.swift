@@ -179,7 +179,9 @@ extension DisplayBarController {
   private func read(stableID: String) async {
     do {
       let value = try await brightnessAccess.read(stableID: stableID)
+      guard !Task.isCancelled else { return }
       applyReadValue(value, stableID: stableID)
+      readFailureCounts.removeValue(forKey: stableID)
       // This display now has a good reading, so its own banner is stale. Every other
       // display's banner is untouched: succeeding here says nothing about them.
       clearFailure(for: stableID)
@@ -188,11 +190,16 @@ extension DisplayBarController {
       // routine bookkeeping — not something the display did. Surfacing it would accuse a
       // healthy monitor of failing, and discarding the reading below would disable its `±`
       // buttons, so the last known value stands until a real read replaces it.
-      if BrightnessFailurePresenter.isCancellation(error) { return }
+      if Task.isCancelled || BrightnessFailurePresenter.isCancellation(error) { return }
       // A stale number is worse than none: it claims a reading that no longer holds.
       if intents.latestValue(for: stableID) == nil {
         setBrightnessForDisplay(nil, id: stableID)
       }
+      let failures = min(2, (readFailureCounts[stableID] ?? 0) + 1)
+      readFailureCounts[stableID] = failures
+      // A first failed read after wake is an unconfirmed value, not evidence of a
+      // disconnected display. The next poll will either restore the value or report it.
+      guard failures > 1 else { return }
       // Filed against the display that actually failed, so the polling loop can report on
       // several displays in one pass without the later ones erasing the earlier ones.
       setFailure(

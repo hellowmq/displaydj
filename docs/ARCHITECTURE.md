@@ -30,8 +30,18 @@ DDC 公共读写入口获得 `HardwareProcessLock`，覆盖整个读或写事务
 
 恢复成功才删除快照，离线或失败显示器保留恢复点。SIGKILL、断电、损坏的状态文件和硬件失联都不能保证即时恢复。App 手动亮度修改不加入 Agent 快照所有权；DDC 锁保证传输事务不重叠，不保证产品层“最后的人类意图优先”。多个 CLI 的状态文件写入仍不构成跨进程数据库事务，自动化应集中通过一个 daemon。
 
-Gamma 与 DisplayServices 不受 DDC 硬件锁覆盖。内部显示器与 Gamma 尚未整合到菜单栏卡片；这是明确的后续工作。
+Gamma 与 DisplayServices 不受 DDC 硬件锁覆盖。内建显示器已经通过 DisplayBrightnessAccess 接入菜单栏卡片；Gamma 尚未接入基础卡片。
 
 ## 产品命名与来源边界
 
 应用 DisplayDJ、主命令 display-cli、仓库 displaydj；兼容命令 displaydj 只用于旧脚本。三个可执行产品共享 `VibeVersion.current` 这一版本来源。当前仓库是独立 Git 历史，没有导入两个源项目的 `.git`；版权与代码来源记录仍须保留，详见[来源与许可](PROVENANCE.md)。
+
+## v0.3.0 预览版显示工具扩展
+
+`AppleSiliconDDCControl` 在既有读写编排中传入连续 VCP feature，复用身份、基线、进程锁与恢复。`MonitorControlService` 将同步 CLI/API 请求转到该内核，逐项返回失败；不会由亮度成功推断音量可用。
+
+`DisplayModeService` 使用 CoreGraphics 的 session 配置事务；每次重读目标与候选，设置后确认身份和模式，失败尝试恢复。模式操作与多个独立进程之间尚无统一产品层仲裁，不应并行应用多个桌面配置。
+
+`DisplayProfileStore` 的独立文件锁覆盖完整读改写，和旧 Agent `StateStore` 的并发限制不同。`DisplayProfileService` 将全量预检与逐屏执行分开，执行和回退前重新解析 UUID/transport。基础亮度快照仍由旧服务管理，所有权与跨 transport 的通用恢复改造仍是后续工作。
+
+`DisplayToolsView` 只负责交互，由它启动 App 内置主 CLI 子进程，沿用有 daemon 则路由 daemon 的策略。子进程在后台读取输出，不阻塞主线程，不以 shell 拼接参数。窗口由菜单栏控制器持有，关闭可再打开。原基础亮度卡片保留既有直接调用路径。

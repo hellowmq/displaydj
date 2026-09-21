@@ -12,6 +12,7 @@ final class DisplayBarController: NSObject, ObservableObject {
   /// Internal rather than `private` because building it, and showing and hiding
   /// it, live in DisplayBarController+Popover.swift. Never part of the view
   /// surface.
+  var toolsWindow: NSWindowController?
   var popover: NSPopover?
   /// Internal for the same reason as `popover`: the global monitor is installed
   /// and removed from the same file.
@@ -56,6 +57,10 @@ final class DisplayBarController: NSObject, ObservableObject {
 
   /// Per-display hardware-confirmed brightness, keyed by stableID.
   @Published private(set) var brightnessByID: [String: Int] = [:]
+  /// A single failed read after wake may be transient. Report only a repeated failure.
+  var readFailureCounts: [String: Int] = [:]
+  nonisolated(unsafe) var wakeObservers: [NSObjectProtocol] = []
+  var wakeRefreshTask: Task<Void, Never>?
   /// Per-display latest user intent, keyed by stableID.
   @Published var intendedByID: [String: Int] = [:]
 
@@ -343,6 +348,26 @@ final class DisplayBarController: NSObject, ObservableObject {
     brightnessByID = copy
   }
 
+  /// A display waking up has not necessarily disconnected; its previous reading is simply
+  /// unverified. Show an empty, inactive track until a fresh read arrives.
+  func invalidateBrightnessAfterWake() {
+    refreshTask?.cancel()
+    refreshTask = nil
+    brightnessByID = [:]
+    readFailureCounts.removeAll()
+    for display in displays {
+      guard let id = display.stableID, let failure = failures[id] else { continue }
+      if case .retryRead = failure.recovery { failures[id] = nil }
+    }
+    wakeRefreshTask?.cancel()
+    guard popoverIsVisible else { return }
+    wakeRefreshTask = Task { @MainActor [weak self] in
+      try? await Task.sleep(for: .milliseconds(400))
+      guard !Task.isCancelled, let self, self.popoverIsVisible else { return }
+      await self.scanAndRefresh()
+    }
+  }
+
   var selectedStableID: String? {
     selection.stableID(in: displays)
   }
@@ -354,6 +379,10 @@ final class DisplayBarController: NSObject, ObservableObject {
   // MARK: - Cleanup
 
   deinit {
+    wakeRefreshTask?.cancel()
+    for observer in wakeObservers {
+      NSWorkspace.shared.notificationCenter.removeObserver(observer)
+    }
     refreshTimer?.invalidate()
     refreshTask?.cancel()
     connectionAutoRelease?.stop()
