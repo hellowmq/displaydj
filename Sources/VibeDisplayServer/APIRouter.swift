@@ -86,6 +86,29 @@ public enum APIRouter {
             .ok(ApplyPayload(results: brightness.restoreAll()))
         }
 
+        router.get("/v1/software-dimming") { request, _ in
+            guard let selector = request.value("selector"), !selector.isEmpty else {
+                throw VibeError(.invalidArgument, "software dimming requires an explicit selector")
+            }
+            return .ok(BrightnessPayload(readings: try brightness.softwareDimming(DisplaySelector(selector))))
+        }
+
+        router.post("/v1/software-dimming") { request, _ in
+            let payload = try request.json(SoftwareDimmingRequest.self)
+            guard case .absolute(let value) = try BrightnessTarget.parse(payload.target) else {
+                throw VibeError(.invalidArgument, "software dimming requires an absolute value")
+            }
+            return .ok(ApplyPayload(results: try brightness.setSoftwareDimming(value,
+                to: DisplaySelector(payload.selector))))
+        }
+
+        router.delete("/v1/software-dimming") { request, _ in
+            guard let selector = request.value("selector"), !selector.isEmpty else {
+                throw VibeError(.invalidArgument, "software dimming requires an explicit selector")
+            }
+            return .ok(ApplyPayload(results: try brightness.stopSoftwareDimming(DisplaySelector(selector))))
+        }
+
         // MARK: keep-awake
 
         router.get("/v1/keepawake") { _, _ in
@@ -195,4 +218,9 @@ public enum APIRouter {
 
 public struct SnapshotPayload: Codable {
     public let snapshot: [String: Double]
+}
+
+private struct SoftwareDimmingRequest: Decodable {
+    let selector: String
+    let target: String
 }

@@ -32,8 +32,22 @@ app=pathlib.Path(sys.argv[1])
 with (app/'Contents/Info.plist').open('wb') as f:
  plistlib.dump(dict(CFBundleExecutable='DisplayDJBar',CFBundleIdentifier='io.github.hellowmq.displaydj',CFBundleName='DisplayDJ',CFBundleDisplayName='DisplayDJ',CFBundleIconFile='DisplayDJ.icns',CFBundleVersion=sys.argv[2],CFBundleShortVersionString=sys.argv[2],CFBundlePackageType='APPL',LSMinimumSystemVersion='13.0',LSUIElement=True,NSHighResolutionCapable=True,NSHumanReadableCopyright='MIT; DisplayDJ, VibeDisplay and MonitorControl contributors'),f)
 PY
-codesign --force --sign - "$app/Contents/MacOS/display-cli"
-codesign --force --sign - "$app/Contents/MacOS/displaydj"
-codesign --force --sign - "$app"
+sign_identity="${DISPLAYDJ_SIGN_IDENTITY:--}"
+sign_args=(--force --sign "$sign_identity")
+sign_label='ad-hoc signed; not notarized'
+if [[ "$sign_identity" != '-' ]]; then
+  sign_args+=(--options runtime --timestamp)
+  sign_label='Developer ID signed; not notarized'
+fi
+codesign "${sign_args[@]}" "$app/Contents/MacOS/display-cli"
+codesign "${sign_args[@]}" "$app/Contents/MacOS/displaydj"
+codesign "${sign_args[@]}" "$app"
 codesign --verify --deep --strict "$app"
-printf 'Built: %s (v%s, ad-hoc signed; not notarized)\n' "$app" "$version"
+if [[ "$sign_identity" != '-' ]]; then
+  signature_details="$(codesign -dv --verbose=4 "$app" 2>&1)"
+  if [[ "$signature_details" != *'Authority=Developer ID Application:'* ]]; then
+    echo 'DISPLAYDJ_SIGN_IDENTITY did not produce a Developer ID Application signature' >&2
+    exit 1
+  fi
+fi
+printf 'Built: %s (v%s, %s)\n' "$app" "$version" "$sign_label"

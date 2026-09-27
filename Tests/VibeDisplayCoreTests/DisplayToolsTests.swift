@@ -1,4 +1,5 @@
 import XCTest
+import DisplayDJCore
 @testable import VibeDisplayCore
 
 final class DisplayToolsTests: XCTestCase {
@@ -41,6 +42,23 @@ final class DisplayToolsTests: XCTestCase {
         XCTAssertFalse(try service.set(.volume, target: "0.5", selector: .all)[0].ok)
         let failed = MonitorControlService(inventory: { [self.display()] }, read: { _, _ in .nan }, write: { _, _, _, _ in .infinity })
         XCTAssertFalse(try failed.read(.contrast, selector: .all)[0].ok)
+    }
+    func testUnsupportedVolumeHasReadableMessageAndStableDiagnosticCode() throws {
+        let service = MonitorControlService(
+            inventory: { [self.display()] },
+            read: { _, _ in
+                throw DisplayDJError(code: .unsupported,
+                                     message: "raw DDC response",
+                                     details: ["featureCode": "0x62", "reason": "ddc-feature-unsupported"])
+            },
+            write: { _, _, _, _ in XCTFail(); return 0 }
+        )
+        let result = try XCTUnwrap(service.read(.volume, selector: .all).first)
+        XCTAssertFalse(result.ok)
+        XCTAssertEqual(result.errorCode, "unsupported")
+        XCTAssertEqual(result.errorDetails?["featureCode"], "0x62")
+        XCTAssertTrue(result.error?.contains("不支持") == true)
+        XCTAssertFalse(result.error?.contains("DisplayDJError") == true)
     }
     func testModePreviewAndReadbackRollback() throws {
         let original = DisplayModeInfo(id: 1, width: 1920, height: 1080, pixelWidth: 3840, pixelHeight: 2160, refreshRate: 60)
@@ -155,6 +173,23 @@ final class DisplayToolsTests: XCTestCase {
         XCTAssertEqual(try secondStore.list().count, 1)
         try secondStore.save(DisplayProfile(name: "two", savedAt: Date(), displays: entries))
         XCTAssertEqual(try firstStore.list().map(\.name), ["one", "two"])
+    }
+
+    func testModePreviewUsesSeparateAppScopedWriter() throws {
+        let original = DisplayModeInfo(id: 1, width: 1920, height: 1080, pixelWidth: 1920, pixelHeight: 1080, refreshRate: 60)
+        let target = DisplayModeInfo(id: 2, width: 1280, height: 720, pixelWidth: 1280, pixelHeight: 720, refreshRate: 60)
+        var current = original
+        var sessionWrites = 0
+        var previewWrites = 0
+        let service = DisplayModeService(inventory: { [self.display()] },
+            read: { _ in (current, [original, target]) },
+            apply: { _, _ in sessionWrites += 1 },
+            preview: { _, _ in previewWrites += 1; current = target })
+        let change = try service.preview(2, selector: .main)
+        XCTAssertTrue(change.verified)
+        XCTAssertEqual(previewWrites, 1)
+        XCTAssertEqual(sessionWrites, 0)
+        XCTAssertEqual(change.previous, original)
     }
 
 }

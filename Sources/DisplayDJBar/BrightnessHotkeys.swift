@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import Foundation
+import DisplayDJCore
 
 /// A brightness hotkey the user can explicitly opt into.
 ///
@@ -26,7 +27,7 @@ enum BrightnessHotkey: Equatable {
   static let requiredModifiers: NSEvent.ModifierFlags = [.control, .command]
 
   /// Human readable form used in the settings row.
-  static let displayName = "⌃⌘=  /  ⌃⌘-"
+  static let displayName = "⌃⌘-  /  ⌃⌘="
 
   /// Resolves a key event to a hotkey, or `nil` when the event does not belong to us.
   ///
@@ -67,6 +68,73 @@ struct BrightnessHotkeyPreference {
   var isEnabled: Bool {
     get { defaults.bool(forKey: Self.defaultsKey) }
     nonmutating set { defaults.set(newValue, forKey: Self.defaultsKey) }
+  }
+}
+
+/// The screen a hotkey controls. The existing selected-display behaviour stays the default.
+enum BrightnessHotkeyTarget: String, CaseIterable {
+  case selected
+  case mouse
+
+  var title: String {
+    switch self {
+    case .selected: "选中的显示器"
+    case .mouse: "鼠标所在显示器"
+    }
+  }
+}
+
+struct BrightnessHotkeyTargetPreference {
+  static let defaultsKey = "DisplayDJBar.BrightnessHotkeyTarget"
+  private let defaults: UserDefaults
+
+  init(defaults: UserDefaults = .standard) {
+    self.defaults = defaults
+  }
+
+  var target: BrightnessHotkeyTarget {
+    get {
+      guard let raw = defaults.string(forKey: Self.defaultsKey) else { return .selected }
+      return BrightnessHotkeyTarget(rawValue: raw) ?? .selected
+    }
+    nonmutating set { defaults.set(newValue.rawValue, forKey: Self.defaultsKey) }
+  }
+}
+
+/// Decides when enabling the opt-in should ask macOS for Accessibility access.
+///
+/// A stored opt-in at launch must not raise a surprise system prompt, and repeatedly writing
+/// `true` must not nag. The prompt is tied only to the user's off-to-on action while trust is
+/// still missing.
+enum BrightnessHotkeyPermissionRequest {
+  static func shouldPrompt(
+    wasEnabled: Bool,
+    isEnabled: Bool,
+    isTrusted: Bool
+  ) -> Bool {
+    !wasEnabled && isEnabled && !isTrusted
+  }
+}
+
+/// Resolve an event against a snapshot of the topology; never fall back to another display
+/// when the pointer is on an unknown or recently disconnected screen.
+enum BrightnessHotkeyTargetResolver {
+  static func stableID(
+    for target: BrightnessHotkeyTarget,
+    selectedStableID: String?,
+    mouseScreenRuntimeID: UInt32?,
+    displays: [DisplayDescriptor]
+  ) -> String? {
+    let candidate: String?
+    switch target {
+    case .selected:
+      candidate = selectedStableID
+    case .mouse:
+      candidate = displays.first(where: { $0.runtimeID == mouseScreenRuntimeID })?.stableID
+    }
+    guard let candidate, !candidate.isEmpty,
+      displays.contains(where: { $0.stableID == candidate }) else { return nil }
+    return candidate
   }
 }
 
@@ -121,6 +189,20 @@ final class BrightnessHotkeyCoordinator {
   /// Read-only: it never raises a system prompt on the user's behalf.
   func hasAccessibilityPermission() -> Bool {
     AXIsProcessTrusted()
+  }
+
+  /// Asks macOS to explain and register the missing Accessibility permission.
+  ///
+  /// This is called only from an explicit user action: turning the shortcut on or pressing
+  /// the request button. The system prompt is asynchronous, so its return value is only the
+  /// trust state at the time of the call; activation reconciliation handles a later grant.
+  @discardableResult
+  func requestAccessibilityPermission() -> Bool {
+    // Spell the documented CFDictionary key directly. In the macOS 27 SDK the imported
+    // `kAXTrustedCheckOptionPrompt` C global is incorrectly exposed as mutable shared state,
+    // which Swift 6 rejects even though this call is main-actor isolated.
+    let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+    return AXIsProcessTrustedWithOptions(options)
   }
 
   /// Re-creates the global observer if it was created before trust was granted.

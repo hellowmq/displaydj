@@ -287,7 +287,7 @@ enum BrightnessFailurePresenter {
     case .transportFailure:
       return Wording(
         summary: "硬件亮度通信未完成",
-        suggestion: "这不能单独确定是线缆、接口还是显示器限制。软件调光尚未接入 App，请稍后重试硬件控制。",
+        suggestion: "这不能单独确定是线缆、接口还是显示器限制。可在「显示设置与预设」中使用独立的软件调光；它不会改变背光。",
         way: .repeatOperation
       )
     case .displayNotFound, .ambiguousDisplay, .verificationFailed, .invalidValue,

@@ -68,6 +68,48 @@ final class StateStoreTests: XCTestCase {
         XCTAssertEqual(state.brightnessSnapshots["deadbeef-0000"], 0.5)
     }
 
+    func testIndependentWritersPreserveEachOthersFields() {
+        let first = makeStore()
+        let second = makeStore()
+        _ = first.load()
+        _ = second.load()
+        first.mutate { $0.brightnessSnapshots["first"] = 0.4 }
+        second.mutate { $0.brightnessSnapshots["second"] = 0.6 }
+
+        let saved = makeStore().load().brightnessSnapshots
+        XCTAssertEqual(saved["first"], 0.4)
+        XCTAssertEqual(saved["second"], 0.6)
+    }
+
+    func testMutationPreservesUnreadableStateFile() throws {
+        let bytes = Data("broken state".utf8)
+        try bytes.write(to: storeURL())
+        makeStore().mutate { $0.brightnessSnapshots["new"] = 0.5 }
+        XCTAssertEqual(try Data(contentsOf: storeURL()), bytes)
+    }
+
+    func testCheckedMutationFailsBeforeAnUnsafeWrite() throws {
+        let bytes = Data("broken recovery state".utf8)
+        try bytes.write(to: storeURL())
+        XCTAssertThrowsError(try makeStore().mutateChecked { $0.brightnessSnapshots["new"] = 0.5 })
+        XCTAssertEqual(try Data(contentsOf: storeURL()), bytes)
+    }
+
+    func testSnapshotTransportSurvivesDiskAndOldStateDecodes() throws {
+        let store = makeStore()
+        store.mutate {
+            $0.brightnessSnapshots["panel"] = 0.42
+            $0.brightnessSnapshotTransports = ["panel": .ddc]
+        }
+        let restored = makeStore().load()
+        XCTAssertEqual(restored.brightnessSnapshotTransports?["panel"], .ddc)
+
+        var oldDocument = try JSONSerialization.jsonObject(with: Data(contentsOf: storeURL())) as! [String: Any]
+        oldDocument.removeValue(forKey: "brightnessSnapshotTransports")
+        try JSONSerialization.data(withJSONObject: oldDocument).write(to: storeURL())
+        XCTAssertNil(makeStore().load().brightnessSnapshotTransports)
+    }
+
     /// reload() must drop the cache and re-read what another process wrote.
     func testReloadReReadsExternalWrite() throws {
         let store = makeStore()

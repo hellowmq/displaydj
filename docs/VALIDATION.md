@@ -1,8 +1,23 @@
 # 验收记录
 
+## 2026-09-28：v1.0.0 发布验收
+
+本节对应 `v1.0.0` 源码、由该版本构建的 GitHub Release，以及开发机上的最终安装验收。本机为 arm64、macOS 27.0；最低 macOS 13 的目标和 Intel 未做安装或硬件验收。发布包采用 ad-hoc 签名且未公证，不声称可无提示安装。真实设备详情及私有日志索引见 [DEVICE-VALIDATION.md](DEVICE-VALIDATION.md)，发版门槛见 [RELEASE-1.0-CHECKLIST.md](RELEASE-1.0-CHECKLIST.md)。
+
+| 项目 | 本地证据与边界 |
+| --- | --- |
+| 自动化 | 最终源码运行 `swift test` 通过 **626 项**：Server 47、Vibe Core 113、DDC Core 196、兼容 CLI 9、App 257、新主 CLI 守护协议 4；`python3 -B scripts/smoke.py`、release 构建与 `git diff --check` 通过，烟雾测试不请求硬件写入 |
+| Release 构建 | 从 `v1.0.0` 源码生成 arm64 ZIP、DMG 及各自 SHA-256；ZIP 中两个 CLI、Info.plist、架构、文件内容与本地 App 一致，DMG 可验证并挂载读取。签名是 ad-hoc，未公证；发布页明确记录首次打开和辅助功能重新授权边界 |
+| HP 当前连接 | DDC 亮度和对比度小幅写入、独立回读、恢复通过；音量 VCP 不支持。HP Gamma 色表单独读回 97%，DDC 背光保持 56% |
+| 双屏 | 内建屏原生背光与 HP DDC 亮度分别调节，中文名称预设跨屏应用后均回到基线；后续用户操作的 GUI 日志显示同步手势逐屏写入并回读确认 95%、26%、100%，结束时两屏均回到测试前 100%。尚无单屏写入失败的 GUI 证据或独立肉眼观感记录 |
+| 模式守护 | HP 上守护 CLI 的 keep、stdin 关闭、15 秒超时与控制进程异常退出模拟均完成真实模式回读与恢复；后续用户 GUI 操作的守护日志显示一次明确保留和一次超时恢复，最终回到所保留的模式，而非测试前模式。设置窗口倒计时的肉眼效果未记录 |
+| GUI 与安装 | 已备份原 0.3.0 安装版并安装 1.0.0 至 `/Applications/DisplayDJ.app`；App 与 daemon 运行路径均来自新 bundle。用户 GUI 操作日志覆盖双屏同步和模式确认；用户还完成了辅助功能的干净重置、当前 App 授权、重启及全局快捷键实测。Computer Use 对 App 仍返回 `AXError.cannotComplete`，干净用户首装和真实睡眠唤醒仍待验收 |
+
+本次 1.0.0 是范围受限的开源直发版本。构建机没有有效 Developer ID 身份，因此发布包不会取得 Gatekeeper 的公证信任；最低系统版本、Intel 和更广硬件矩阵仍缺少证据，不能从版本号推断这些能力。
+
 ## 2026-09-21：v0.3.0 预览版本地验收
 
-本版包含共享 DDC 对比度/音量、显示模式、亮度预设、独立 CLI 文档、移除菜单栏 Agent 服务入口，以及唤醒后亮度未确认时的灰色等待态。下表是本机证据；远端 CI 与 GitHub Release 需按对应提交单独核对。
+本版包含共享 DDC 对比度/音量、显示模式、亮度预设，以及唤醒后亮度未确认时的等待状态。下表记录本机验证结果。提交 `35d088d` 对应的 [GitHub Actions](https://github.com/hellowmq/displaydj/actions/runs/35617044147) 已通过；[v0.3.0 Release](https://github.com/hellowmq/displaydj/releases/tag/v0.3.0) 已发布为预览版，提供 arm64 ZIP 与 SHA-256 文件。远端构建通过不代表新增硬件写入已完成实机验收。
 
 | 项目 | 结果与边界 |
 | --- | --- |
@@ -15,7 +30,7 @@
 | 新硬件写入 | 对比度、音量、模式切换及多屏回退尚无真实设备写入/恢复证据；不得据此声称设备兼容 |
 | 平台与分发 | 本机 arm64；Intel、双架构、Developer ID 签名、公证和无提示安装仍未验证 |
 
-本机测试日志位于 `/tmp/displaydj-030-test.log`，隔离烟雾测试和发布包校验于本轮命令执行。GitHub Release 的 ZIP 即使可下载，也仅为预览包。
+本机测试日志位于 `/tmp/displaydj-030-test.log`，隔离烟雾测试和发布包校验于本轮命令执行。
 
 ## 2026-09-21：v0.3.0 开发阶段记录（历史快照）
 
@@ -35,9 +50,9 @@
 
 本机详细日志位于 git 忽略的 `outputs/catch-up-2026-09-21/`。历史 Dell 记录属于另一轮探测，不能用来声称这次已有可写外屏。
 
-## 此前整合版记录
+## 历史：v0.2.x 整合版记录
 
-日期：2026-09-21。环境：本机 macOS / Apple Silicon，Apple Swift 6.4。以下是本次运行所得，不沿用压缩包 README 中的历史结果。
+日期：2026-09-21。环境：本机 macOS / Apple Silicon，Apple Swift 6.4。以下是当时运行所得，不沿用压缩包 README 中的历史结果。
 
 | 项目 | 结果 | 证据 / 范围 |
 | --- | --- | --- |
@@ -54,8 +69,8 @@
 | 真实亮度写入 / 恢复 | 未运行 | 本次只读探测，未对用户显示器发出调光操作 |
 | 真实断开 / 重连 | 未运行 | 未改变显示拓扑 |
 | Intel / 双架构 | 未验证 | 本次仅 arm64 构建 |
-| GitHub CI | 已配置，最新状态见 README 徽章 | `macos-15` 执行构建、576 项测试、隔离烟雾测试和 App bundle 构建；此前的兼容 CLI 并发编译失败已在本次修复 |
-| GitHub Release | 未发布 | 仓库已有 `v0.2.0` Git tag，但没有据此声称存在正式 Release 或可分发安装包 |
+| GitHub CI | 当时已配置 | `macos-15` 执行构建、576 项测试、隔离烟雾测试和 App bundle 构建；此前的兼容 CLI 并发编译失败已在本次修复 |
+| GitHub Release | 当时未发布 | 仓库已有 `v0.2.0` Git tag；本行只记录该阶段，不代表当前 Release 状态 |
 | Developer ID / 公证 | 未完成 | 没有声称已公证或可无提示分发 |
 
 测试包含两种框架：XCTest 138 项，加 Swift Testing 438 项，共 576 项。测试日志中同一个 XCTest 汇总可能出现两遍，统计时未重复计数。
@@ -64,4 +79,4 @@
 
 硬件探测结论只代表此机器在运行时能返回发现与诊断信息，不构成某型号显示器的写入兼容性认证。
 
-项目已更新到 `0.2.3`，品牌标记统一为 Rounded Channel + Signature Gap + Fader，普通亮度交互统一使用 Spectral Cyan。Dell 身份兼容修复与真实读取的失败边界见[硬件检查](HARDWARE.md)。仓库已公开在 `hellowmq/displaydj`，默认分支为 `master`；源项目 Git 历史未导入，来源与许可证据继续单独保留。
+当时项目版本为 `0.2.3`。Dell 身份兼容修复与真实读取的失败边界见[硬件检查](HARDWARE.md)；源项目 Git 历史未导入，来源与许可证据见[来源与许可](PROVENANCE.md)。

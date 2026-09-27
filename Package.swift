@@ -28,6 +28,7 @@ let package = Package(
         .executableTarget(name: "DisplayDJBar", dependencies: ["DisplayDJCore", "VibeDisplayCore"]),
         .testTarget(name: "DisplayDJCoreTests", dependencies: ["DisplayDJCore"]),
         .testTarget(name: "DisplayDJCLITests", dependencies: ["DisplayDJCLI", "DisplayDJCore"]),
+        .testTarget(name: "DisplayCLITests", dependencies: ["DisplayCLI"]),
         .testTarget(name: "DisplayDJBarTests", dependencies: ["DisplayDJBar"]),
         .testTarget(name: "VibeDisplayCoreTests", dependencies: ["VibeDisplayCore"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(name: "VibeDisplayServerTests", dependencies: ["VibeDisplayServer"], swiftSettings: [.swiftLanguageMode(.v5)]),

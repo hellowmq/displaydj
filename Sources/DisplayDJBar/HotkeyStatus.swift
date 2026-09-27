@@ -7,13 +7,13 @@
 /// * the switch itself, drawn from `hotkeysEnabled`;
 /// * the permission notice below it, drawn from `hotkeysEnabled && !hasAccessibilityPermission`;
 /// * the switch's spoken value, drawn from **nothing at all** — it was
-///   `.accessibilityValue(controller.hotkeyDisplayName)`, and `hotkeyDisplayName` is the
-///   constant `"⌃⌘=  /  ⌃⌘-"`.
+///   `.accessibilityValue(controller.hotkeyDisplayName)`, and `hotkeyDisplayName` is a
+///   constant shortcut pair.
 ///
 /// That third one is the defect, and it is worse than a missing description, because
 /// `accessibilityValue` on a `Toggle` does not *add* to the state VoiceOver speaks — it
 /// replaces it. So the one thing a switch exists to convey was the one thing it stopped
-/// conveying: VoiceOver read "亮度快捷键，⌃⌘= / ⌃⌘-" whether the shortcut was on or off, and a
+/// conveying: VoiceOver read the shortcut pair whether it was on or off, and a
 /// user who could not see the switch had no way to find out which. The key combination is
 /// already on screen as a label beside it; the state was not anywhere.
 ///

@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import DisplayDJCore
 import Testing
 
 @testable import DisplayDJBar
@@ -82,4 +83,76 @@ func hotkeyPreferencePersistsExplicitChoice() {
 
   preference.isEnabled = false
   #expect(BrightnessHotkeyPreference(defaults: defaults).isEnabled == false)
+}
+
+private func hotkeyDisplay(_ runtimeID: UInt32, _ stableID: String?) -> DisplayDescriptor {
+  DisplayDescriptor(
+    runtimeID: runtimeID,
+    stableID: stableID,
+    name: "Display \(runtimeID)",
+    vendorID: 1,
+    productID: 2,
+    serialNumber: 3,
+    isBuiltIn: runtimeID == 1,
+    isVirtual: false,
+    isMirrored: false
+  )
+}
+
+@Test("Hotkey target defaults to the selected display and persists the pointer choice")
+func hotkeyTargetPreferenceRoundTrips() {
+  let suite = "DisplayDJBarTests.hotkeyTarget"
+  let defaults = makeIsolatedDefaults(suite)
+  defer { defaults.removePersistentDomain(forName: suite) }
+
+  let preference = BrightnessHotkeyTargetPreference(defaults: defaults)
+  #expect(preference.target == .selected)
+  preference.target = .mouse
+  #expect(BrightnessHotkeyTargetPreference(defaults: defaults).target == .mouse)
+  defaults.set("unrecognised", forKey: BrightnessHotkeyTargetPreference.defaultsKey)
+  #expect(preference.target == .selected)
+}
+
+@Test("Pointer target follows screen runtime identity, not the selected card")
+func hotkeyPointerTargetUsesScreen() {
+  let displays = [hotkeyDisplay(1, "built-in"), hotkeyDisplay(2, "hp")]
+  #expect(BrightnessHotkeyTargetResolver.stableID(
+    for: .selected, selectedStableID: "built-in", mouseScreenRuntimeID: 2,
+    displays: displays
+  ) == "built-in")
+  #expect(BrightnessHotkeyTargetResolver.stableID(
+    for: .mouse, selectedStableID: "built-in", mouseScreenRuntimeID: 2,
+    displays: displays
+  ) == "hp")
+}
+
+@Test("Unknown pointer screen or unstable identity never redirects to another display")
+func hotkeyPointerTargetFailsClosed() {
+  let displays = [hotkeyDisplay(1, "built-in"), hotkeyDisplay(2, nil)]
+  for screenID in [UInt32?(nil), UInt32?(2), UInt32?(3)] {
+    #expect(BrightnessHotkeyTargetResolver.stableID(
+      for: .mouse, selectedStableID: "built-in", mouseScreenRuntimeID: screenID,
+      displays: displays
+    ) == nil)
+  }
+  #expect(BrightnessHotkeyTargetResolver.stableID(
+    for: .selected, selectedStableID: "detached", mouseScreenRuntimeID: 1,
+    displays: displays
+  ) == nil)
+}
+
+@Test("Accessibility prompt follows only a fresh explicit opt-in without trust")
+func accessibilityPromptFollowsFreshOptIn() {
+  #expect(
+    BrightnessHotkeyPermissionRequest.shouldPrompt(
+      wasEnabled: false, isEnabled: true, isTrusted: false))
+  #expect(
+    BrightnessHotkeyPermissionRequest.shouldPrompt(
+      wasEnabled: false, isEnabled: true, isTrusted: true) == false)
+  #expect(
+    BrightnessHotkeyPermissionRequest.shouldPrompt(
+      wasEnabled: true, isEnabled: true, isTrusted: false) == false)
+  #expect(
+    BrightnessHotkeyPermissionRequest.shouldPrompt(
+      wasEnabled: true, isEnabled: false, isTrusted: false) == false)
 }

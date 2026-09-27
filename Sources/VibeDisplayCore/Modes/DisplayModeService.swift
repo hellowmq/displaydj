@@ -47,6 +47,7 @@ public final class DisplayModeService {
     private let inventory: () -> [DisplayInfo]
     private let readModes: (UInt32) throws -> (DisplayModeInfo, [DisplayModeInfo])
     private let applyMode: (UInt32, Int32) throws -> Void
+    private let previewMode: (UInt32, Int32) throws -> Void
 
     public convenience init() {
         self.init(inventory: { DisplayRegistry.shared.displays(forceRefresh: true) }, read: { id in
@@ -55,33 +56,38 @@ public final class DisplayModeService {
                 throw VibeError(.unsupportedOperation, "WindowServer did not report display modes")
             }
             return (DisplayModeInfo(current), modes.map(DisplayModeInfo.init))
-        }, apply: { id, modeID in
-            guard let modes = CGDisplayCopyAllDisplayModes(id, [kCGDisplayShowDuplicateLowResolutionModes: true] as CFDictionary) as? [CGDisplayMode],
-                  let mode = modes.first(where: { $0.ioDisplayModeID == modeID }) else {
-                throw VibeError(.displayNotFound, "display mode disappeared; list modes again")
-            }
-            var config: CGDisplayConfigRef?
-            guard CGBeginDisplayConfiguration(&config) == .success, let config else {
-                throw VibeError(.backendFailure, "cannot begin display configuration")
-            }
-            let staged = CGConfigureDisplayWithDisplayMode(config, id, mode, nil)
-            guard staged == .success else {
-                CGCancelDisplayConfiguration(config)
-                throw VibeError(.backendFailure, "cannot configure display mode (\(staged.rawValue))")
-            }
-            let completed = CGCompleteDisplayConfiguration(config, .forSession)
-            guard completed == .success else {
-                throw VibeError(.backendFailure, "cannot complete display configuration (\(completed.rawValue))")
-            }
-            DisplayRegistry.shared.invalidate()
-            BrightnessService.shared.invalidate()
-        })
+        }, apply: { try Self.configure($0, modeID: $1, option: .forSession) },
+           preview: { try Self.configure($0, modeID: $1, option: .forAppOnly) })
+    }
+
+    private static func configure(_ id: UInt32, modeID: Int32, option: CGConfigureOption) throws {
+        guard let modes = CGDisplayCopyAllDisplayModes(id, [kCGDisplayShowDuplicateLowResolutionModes: true] as CFDictionary) as? [CGDisplayMode],
+              let mode = modes.first(where: { $0.ioDisplayModeID == modeID }) else {
+            throw VibeError(.displayNotFound, "display mode disappeared; list modes again")
+        }
+        var config: CGDisplayConfigRef?
+        guard CGBeginDisplayConfiguration(&config) == .success, let config else {
+            throw VibeError(.backendFailure, "cannot begin display configuration")
+        }
+        let staged = CGConfigureDisplayWithDisplayMode(config, id, mode, nil)
+        guard staged == .success else {
+            CGCancelDisplayConfiguration(config)
+            throw VibeError(.backendFailure, "cannot configure display mode (\(staged.rawValue))")
+        }
+        let completed = CGCompleteDisplayConfiguration(config, option)
+        guard completed == .success else {
+            throw VibeError(.backendFailure, "cannot complete display configuration (\(completed.rawValue))")
+        }
+        DisplayRegistry.shared.invalidate()
+        BrightnessService.shared.invalidate()
     }
 
     init(inventory: @escaping () -> [DisplayInfo],
          read: @escaping (UInt32) throws -> (DisplayModeInfo, [DisplayModeInfo]),
-         apply: @escaping (UInt32, Int32) throws -> Void) {
+         apply: @escaping (UInt32, Int32) throws -> Void,
+         preview: ((UInt32, Int32) throws -> Void)? = nil) {
         self.inventory = inventory; readModes = read; applyMode = apply
+        previewMode = preview ?? apply
     }
 
     public func list(_ selector: DisplaySelector) throws -> [DisplayModeReport] {
@@ -95,6 +101,17 @@ public final class DisplayModeService {
     }
 
     public func set(_ modeID: Int32, selector: DisplaySelector, dryRun: Bool = false) throws -> DisplayModeChange {
+        try change(modeID, selector: selector, dryRun: dryRun, writer: applyMode)
+    }
+
+    /// Uses CoreGraphics' app-only configuration. The caller must stay alive
+    /// while the preview is visible; macOS restores the session mode on exit.
+    public func preview(_ modeID: Int32, selector: DisplaySelector) throws -> DisplayModeChange {
+        try change(modeID, selector: selector, dryRun: false, writer: previewMode)
+    }
+
+    private func change(_ modeID: Int32, selector: DisplaySelector, dryRun: Bool,
+                        writer: (UInt32, Int32) throws -> Void) throws -> DisplayModeChange {
         let initial = inventory()
         let targets = try selector.resolve(in: initial)
         guard targets.count == 1, let display = targets.first, UUID(uuidString: display.uuid) != nil else {
@@ -111,7 +128,7 @@ public final class DisplayModeService {
         }
         guard inventory() == initial else { throw VibeError(.sessionConflict, "display topology changed before mode application") }
         do {
-            try applyMode(display.id, modeID)
+            try writer(display.id, modeID)
             guard inventory().contains(where: { $0.id == display.id && $0.uuid == display.uuid }) else {
                 throw VibeError(.sessionConflict, "display identity changed after mode application")
             }
@@ -124,7 +141,7 @@ public final class DisplayModeService {
             var recovery = "not attempted: display identity changed"
             if inventory().contains(where: { $0.id == display.id && $0.uuid == display.uuid }) {
                 do {
-                    try applyMode(display.id, previous.id)
+                    try writer(display.id, previous.id)
                     recovery = try readModes(display.id).0 == previous ? "verified" : "readback mismatch"
                 } catch { recovery = "failed: \(error)" }
             }

@@ -14,10 +14,26 @@ public struct DisplayPreferences: Codable, Equatable, Sendable {
   /// physical layout"; a non-empty array pins the order and any display not
   /// listed is appended after it, sorted by physical position.
   public var manualOrder: [String]?
+  /// Opt-in relative brightness changes across online physical displays.
+  public var syncBrightness: Bool
 
-  public init(aliases: [String: String] = [:], manualOrder: [String]? = nil) {
+  public init(
+    aliases: [String: String] = [:],
+    manualOrder: [String]? = nil,
+    syncBrightness: Bool = false
+  ) {
     self.aliases = aliases
     self.manualOrder = manualOrder
+    self.syncBrightness = syncBrightness
+  }
+
+  private enum CodingKeys: String, CodingKey { case aliases, manualOrder, syncBrightness }
+
+  public init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    aliases = try values.decode([String: String].self, forKey: .aliases)
+    manualOrder = try values.decodeIfPresent([String].self, forKey: .manualOrder)
+    syncBrightness = try values.decodeIfPresent(Bool.self, forKey: .syncBrightness) ?? false
   }
 
   public static let empty = DisplayPreferences()
@@ -43,6 +59,11 @@ public final class FileDisplayPreferencesStore: DisplayPreferencesStoring {
 
     if let fileURL {
       self.fileURL = fileURL
+    } else if let home = ProcessInfo.processInfo.environment["DISPLAYDJ_HOME"], !home.isEmpty {
+      self.fileURL = URL(
+        fileURLWithPath: (home as NSString).expandingTildeInPath,
+        isDirectory: true
+      ).appendingPathComponent("display-preferences.json", isDirectory: false)
     } else {
       let base = fileManager.urls(
         for: .applicationSupportDirectory,

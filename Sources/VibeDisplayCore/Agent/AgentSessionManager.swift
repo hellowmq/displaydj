@@ -38,7 +38,9 @@ public final class AgentSessionManager {
         self.config = config
         // Re-seed snapshots recorded by a previous process so `restore` still
         // works after a daemon restart.
-        brightness.seedSnapshots(store.load().brightnessSnapshots)
+        let persisted = store.load()
+        brightness.seedSnapshots(persisted.brightnessSnapshots,
+                                 transports: persisted.brightnessSnapshotTransports ?? [:])
     }
 
     public func updateConfig(_ config: VibeConfig) {
@@ -82,6 +84,7 @@ public final class AgentSessionManager {
 
         // Snapshot BEFORE anything is mutated (invariant 1).
         let taken = try brightness.snapshot(DisplaySelector(resolvedSelector))
+        let transports = brightness.snapshotTransportValues()
 
         var session = AgentSession(
             id: "as_" + UUID().uuidString.prefix(10).lowercased(),
@@ -96,10 +99,15 @@ public final class AgentSessionManager {
             metadata: metadata
         )
 
-        store.mutate { state in
+        try store.mutateChecked { state in
             state.sessions.append(session)
             for (k, v) in taken where state.brightnessSnapshots[k] == nil {
                 state.brightnessSnapshots[k] = v
+                if let transport = transports[k] {
+                    var saved = state.brightnessSnapshotTransports ?? [:]
+                    saved[k] = transport
+                    state.brightnessSnapshotTransports = saved
+                }
             }
         }
 
@@ -204,6 +212,7 @@ public final class AgentSessionManager {
     public func panicRestore() -> [BrightnessApplyResult] {
         keepAwake.releaseEverything()
         let results = brightness.restoreAll()
+        brightness.gamma.releaseAll()
         store.mutate { state in
             state.sessions = state.sessions.map { s in
                 var copy = s

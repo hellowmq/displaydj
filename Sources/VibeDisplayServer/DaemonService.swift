@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import VibeDisplayCore
 
 /// The resident process.
@@ -27,6 +28,8 @@ public final class DaemonService {
     private var server: HTTPServer?
     private var reaper: DispatchSourceTimer?
     private var signalSources: [DispatchSourceSignal] = []
+    private var wakeObservers: [NSObjectProtocol] = []
+    private var wakeReapply: DispatchWorkItem?
     private let shutdownOnce = NSLock()
     private var didShutdown = false
 
@@ -78,6 +81,7 @@ public final class DaemonService {
         try descriptor.write()
 
         installSignalHandlers()
+        observeWake()
         startReaper()
 
         Log.info("display-cli daemon listening",
@@ -110,6 +114,33 @@ public final class DaemonService {
 
     // MARK: - Shutdown
 
+    private func observeWake() {
+        for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
+            let observer = NSWorkspace.shared.notificationCenter.addObserver(
+                forName: name, object: nil, queue: .main
+            ) { [weak self] _ in
+                self?.scheduleGammaReapply()
+            }
+            wakeObservers.append(observer)
+        }
+    }
+
+    private func scheduleGammaReapply() {
+        // Both notifications can arrive for the same wake. Give WindowServer a
+        // moment to enumerate the new runtime IDs, then apply the last user value.
+        wakeReapply?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            let displays = DisplayRegistry.shared.displays(forceRefresh: true)
+            let restored = self.brightness.gamma.reapplyActive(to: displays)
+            if !restored.isEmpty {
+                Log.info("software dimming reapplied after wake", ["count": "\(restored.count)"])
+            }
+        }
+        wakeReapply = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
+    }
+
     private func installSignalHandlers() {
         for sig in [SIGINT, SIGTERM, SIGHUP] {
             // Ignore the default disposition so the dispatch source can see it.
@@ -133,6 +164,9 @@ public final class DaemonService {
         didShutdown = true
         shutdownOnce.unlock()
 
+        wakeReapply?.cancel()
+        for observer in wakeObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
+        wakeObservers.removeAll()
         reaper?.cancel()
         server?.stop()
 
@@ -140,6 +174,7 @@ public final class DaemonService {
         // then force-restore anything left, then drop assertions.
         _ = sessions.endAll(outcome: .idle, endedBy: "daemon-shutdown")
         _ = brightness.restoreAll(ramp: .instant)
+        brightness.gamma.releaseAll()
         keepAwake.releaseEverything()
         DaemonDescriptor.remove()
 

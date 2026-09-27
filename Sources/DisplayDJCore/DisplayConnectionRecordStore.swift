@@ -30,7 +30,8 @@ public protocol DisplayConnectionRecordStoring: Sendable {
   func saveRecords(_ records: [DisplayConnectionRecord]) throws
 }
 
-/// The production store: one JSON file under Application Support.
+/// The production store: one JSON file under Application Support, or under
+/// `DISPLAYDJ_HOME` when an isolated CLI session selects a separate home.
 public final class FileDisplayConnectionRecordStore: DisplayConnectionRecordStoring {
   private let fileURL: URL
   private let fileManager: FileManager
@@ -40,15 +41,44 @@ public final class FileDisplayConnectionRecordStore: DisplayConnectionRecordStor
     fileManager: FileManager = .default
   ) {
     self.fileManager = fileManager
+    self.fileURL = Self.recordURL(
+      fileURL: fileURL,
+      fileManager: fileManager,
+      environment: ProcessInfo.processInfo.environment
+    )
+  }
 
+  public init(
+    fileURL: URL? = nil,
+    fileManager: FileManager = .default,
+    environment: [String: String]
+  ) {
+    self.fileManager = fileManager
+    self.fileURL = Self.recordURL(
+      fileURL: fileURL,
+      fileManager: fileManager,
+      environment: environment
+    )
+  }
+
+  private static func recordURL(
+    fileURL: URL?,
+    fileManager: FileManager,
+    environment: [String: String]
+  ) -> URL {
     if let fileURL {
-      self.fileURL = fileURL
+      return fileURL
+    } else if let home = environment["DISPLAYDJ_HOME"], !home.isEmpty {
+      return URL(
+        fileURLWithPath: (home as NSString).expandingTildeInPath,
+        isDirectory: true
+      ).appendingPathComponent("disconnected-displays.json", isDirectory: false)
     } else {
       let base = fileManager.urls(
         for: .applicationSupportDirectory,
         in: .userDomainMask
       ).first
-      self.fileURL =
+      return
         (base ?? fileManager.temporaryDirectory)
         .appendingPathComponent("DisplayDJ", isDirectory: true)
         .appendingPathComponent("disconnected-displays.json", isDirectory: false)

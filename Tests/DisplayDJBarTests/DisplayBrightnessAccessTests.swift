@@ -20,6 +20,43 @@ private struct BrightnessDiscovery: DisplayDiscovering {
   func discoverDisplays() async throws -> [DisplayDescriptor] { displays }
 }
 
+private actor ChangingBrightnessDiscovery: DisplayDiscovering {
+  private var displays: [DisplayDescriptor] = []
+  private var scans = 0
+
+  func discoverDisplays() async throws -> [DisplayDescriptor] {
+    scans += 1
+    return displays
+  }
+
+  func update(_ displays: [DisplayDescriptor]) { self.displays = displays }
+  func scanCount() -> Int { scans }
+}
+
+private actor OutOfOrderBrightnessDiscovery: DisplayDiscovering {
+  private var calls = 0
+  private var firstStarted: CheckedContinuation<Void, Never>?
+  private var firstResult: CheckedContinuation<[DisplayDescriptor], Never>?
+
+  func discoverDisplays() async throws -> [DisplayDescriptor] {
+    calls += 1
+    guard calls == 1 else { return [panel(true)] }
+    firstStarted?.resume()
+    firstStarted = nil
+    return await withCheckedContinuation { firstResult = $0 }
+  }
+
+  func waitForFirstScan() async {
+    guard calls == 0 else { return }
+    await withCheckedContinuation { firstStarted = $0 }
+  }
+
+  func finishFirstScan() {
+    firstResult?.resume(returning: [])
+    firstResult = nil
+  }
+}
+
 private final class NativeBackendStub: BrightnessBackend {
   let transport = BrightnessTransport.displayServices
   var available = true
@@ -43,6 +80,36 @@ private final class NativeBackendStub: BrightnessBackend {
 @Suite("Menu bar native and external brightness routing")
 @MainActor
 struct DisplayBrightnessAccessTests {
+  @Test func delayedTopologyRefreshFindsDisplayMissingAtFirstScan() async throws {
+    let discovery = ChangingBrightnessDiscovery()
+    let controller = DisplayBarController()
+    controller.displayDiscovery = discovery
+
+    await controller.scanAndRefresh()
+    #expect(controller.displays.isEmpty)
+    await discovery.update([panel(true)])
+    controller.scheduleTopologyRescan()
+    controller.scheduleTopologyRescan()
+    try await Task.sleep(for: .milliseconds(700))
+
+    #expect(controller.displays.count == 1)
+    #expect(await discovery.scanCount() == 2)
+  }
+
+  @Test func staleEmptyScanCannotReplaceNewerDisplayList() async {
+    let discovery = OutOfOrderBrightnessDiscovery()
+    let controller = DisplayBarController()
+    controller.displayDiscovery = discovery
+
+    let first = Task { await controller.scanAndRefresh() }
+    await discovery.waitForFirstScan()
+    await controller.scanAndRefresh()
+    await discovery.finishFirstScan()
+    await first.value
+
+    #expect(controller.displays.compactMap(\.stableID) == [internalID])
+  }
+
   private func access(_ backend: NativeBackendStub,
                       displays: [DisplayDescriptor] = [panel(true), panel(false)]) -> DisplayBrightnessAccess {
     DisplayBrightnessAccess(discovery: BrightnessDiscovery(displays: displays),
@@ -145,6 +212,91 @@ struct DisplayBrightnessAccessTests {
     #expect(controller.brightnessByID[externalID] == 55)
     #expect(backend.writes.count == 1)
     #expect(controller.intendedByID.isEmpty)
+  }
+
+  @Test func optedInSyncMovesTwoConfirmedDisplaysByTheSameDelta() async {
+    let backend = NativeBackendStub()
+    let controller = DisplayBarController()
+    controller.preferencesStore = InMemoryDisplayPreferencesStore()
+    controller.displayDiscovery = BrightnessDiscovery(displays: [panel(true), panel(false)])
+    var externalValue = 35.0
+    var externalWrites: [Double] = []
+    var router = access(backend)
+    router.readDDC = { _ in externalValue }
+    router.writeDDC = { percent, id in
+      #expect(id == externalID)
+      externalWrites.append(percent)
+      externalValue = percent
+      return percent
+    }
+    controller.brightnessAccess = router
+    await controller.scanAndRefresh()
+
+    await controller.setBrightnessSyncEnabled(true)
+    #expect(controller.isBrightnessSyncEnabled)
+    await controller.setBrightness(48, for: internalID)
+    #expect(controller.brightnessByID[internalID] == 48)
+    #expect(controller.brightnessByID[externalID] == 40)
+    #expect(externalWrites == [40])
+    #expect(backend.writes.last?.1 == 0.48)
+  }
+
+  @Test func missingFollowerReadingTurnsSyncOffBeforeTheSourceWrite() async {
+    let backend = NativeBackendStub()
+    let controller = DisplayBarController()
+    controller.preferencesStore = InMemoryDisplayPreferencesStore()
+    controller.displayDiscovery = BrightnessDiscovery(displays: [panel(true), panel(false)])
+    var externalWrites: [Double] = []
+    var router = access(backend)
+    router.readDDC = { _ in 35 }
+    router.writeDDC = { percent, _ in externalWrites.append(percent); return percent }
+    controller.brightnessAccess = router
+    await controller.scanAndRefresh()
+    await controller.setBrightnessSyncEnabled(true)
+    controller.setBrightnessForDisplay(nil, id: externalID)
+
+    await controller.setBrightness(48, for: internalID)
+
+    #expect(controller.isBrightnessSyncEnabled == false)
+    #expect(controller.brightnessByID[internalID] == 48)
+    #expect(externalWrites.isEmpty)
+    #expect(controller.failures.topology?.summary == "无法同步调节显示器")
+  }
+
+  @Test func unreadableExternalCannotEnableHardwareSync() async {
+    let backend = NativeBackendStub()
+    let controller = DisplayBarController()
+    controller.preferencesStore = InMemoryDisplayPreferencesStore()
+    controller.displayDiscovery = BrightnessDiscovery(displays: [panel(true), panel(false)])
+    var router = access(backend)
+    router.readDDC = { _ in
+      throw DisplayDJError(code: .transportFailure, message: "Get VCP failed")
+    }
+    controller.brightnessAccess = router
+    await controller.scanAndRefresh()
+
+    await controller.setBrightnessSyncEnabled(true)
+
+    #expect(controller.isBrightnessSyncEnabled == false)
+    #expect(controller.failures.topology?.summary == "无法同步调节显示器")
+    #expect(backend.writes.isEmpty)
+  }
+
+  @Test func invalidExternalReadingCannotEnableHardwareSync() async {
+    let backend = NativeBackendStub()
+    let controller = DisplayBarController()
+    controller.preferencesStore = InMemoryDisplayPreferencesStore()
+    controller.displayDiscovery = BrightnessDiscovery(displays: [panel(true), panel(false)])
+    var router = access(backend)
+    router.readDDC = { _ in 101 }
+    controller.brightnessAccess = router
+    await controller.scanAndRefresh()
+
+    await controller.setBrightnessSyncEnabled(true)
+
+    #expect(controller.isBrightnessSyncEnabled == false)
+    #expect(controller.failures.topology?.summary == "无法同步调节显示器")
+    #expect(backend.writes.isEmpty)
   }
 
   @Test func transientReadFailureStaysNeutralUntilNextRead() async {

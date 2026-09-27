@@ -14,7 +14,9 @@ struct DisplayPreferencesStoreTests {
 
   @Test func fileRoundTripsAliasesAndOrder() throws {
     let store = FileDisplayPreferencesStore(fileURL: tempFile())
-    let prefs = DisplayPreferences(aliases: ["s1": "右屏"], manualOrder: ["s1", "s2"])
+    let prefs = DisplayPreferences(
+      aliases: ["s1": "右屏"], manualOrder: ["s1", "s2"], syncBrightness: true
+    )
 
     try store.savePreferences(prefs)
     let loaded = try store.loadPreferences()
@@ -22,6 +24,7 @@ struct DisplayPreferencesStoreTests {
     #expect(loaded == prefs)
     #expect(loaded.aliases["s1"] == "右屏")
     #expect(loaded.manualOrder == ["s1", "s2"])
+    #expect(loaded.syncBrightness)
   }
 
   @Test func missingFileReadsAsEmpty() throws {
@@ -49,5 +52,12 @@ struct DisplayPreferencesStoreTests {
     let loaded = try store.loadPreferences()
 
     #expect(loaded == .empty)
+  }
+
+  @Test func olderPreferencesDefaultToNoBrightnessSync() throws {
+    let oldData = Data(#"{"aliases":{"s1":"右屏"},"manualOrder":["s1"]}"#.utf8)
+    let loaded = try JSONDecoder().decode(DisplayPreferences.self, from: oldData)
+    #expect(loaded.syncBrightness == false)
+    #expect(loaded.aliases["s1"] == "右屏")
   }
 }

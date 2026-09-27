@@ -2,7 +2,12 @@ import AppKit
 import ApplicationServices
 import Combine
 import DisplayDJCore
+import OSLog
 import SwiftUI
+
+private let displayTopologyLogger = Logger(
+  subsystem: "io.github.hellowmq.displaydj", category: "DisplayTopology"
+)
 
 @MainActor
 final class DisplayBarController: NSObject, ObservableObject {
@@ -141,6 +146,8 @@ final class DisplayBarController: NSObject, ObservableObject {
   /// The user's display presentation choices, loaded at setup. Published so a card
   /// re-renders when its alias changes without the topology changing.
   @Published var preferences = DisplayPreferences()
+  /// Read-only preparation before opting into synchronized hardware changes.
+  @Published var isPreparingBrightnessSync = false
 
   /// Whether a hardware read is in flight. Read-only to the view.
   var isReading: Bool { reads.isReading }
@@ -188,7 +195,7 @@ final class DisplayBarController: NSObject, ObservableObject {
     // A connection change counts as busy: it reconfigures the whole display
     // layout, and a brightness read started across that change would be aimed at
     // a topology that is still moving.
-    isReading || isWriting || isChangingConnection
+    isReading || isWriting || isChangingConnection || isPreparingBrightnessSync
   }
 
   /// Whether the top-bar activity spinner should be visible.
@@ -200,7 +207,7 @@ final class DisplayBarController: NSObject, ObservableObject {
   /// reserved for operations that actually block the user: a write, a connection change, or
   /// a read they triggered themselves (manual refresh, a single-display read, a hotkey).
   var showsActivitySpinner: Bool {
-    (isReading && !isPollingRead) || isWriting || isChangingConnection
+    (isReading && !isPollingRead) || isWriting || isChangingConnection || isPreparingBrightnessSync
   }
 
   var intents = BrightnessIntentBuffer()
@@ -208,6 +215,11 @@ final class DisplayBarController: NSObject, ObservableObject {
   /// The in-flight read. Internal rather than `private` because the polling extension
   /// lives in its own file and must be able to cancel a superseded read.
   var refreshTask: Task<Void, Never>?
+  var topologyRefreshTask: Task<Void, Never>?
+  nonisolated(unsafe) var screenParametersObserver: NSObjectProtocol?
+  /// Re-checks a grant after the user returns from System Settings or the system prompt.
+  nonisolated(unsafe) var applicationActivationObserver: NSObjectProtocol?
+  private var scanGeneration: UInt64 = 0
   var displayDiscovery: any DisplayDiscovering = CoreGraphicsDisplayDiscovery()
   var brightnessAccess = DisplayBrightnessAccess()
 
@@ -231,8 +243,10 @@ final class DisplayBarController: NSObject, ObservableObject {
   /// Written only by the hotkey extension; the view treats it as read-only through the
   /// binding it hands to the toggle.
   @Published var hotkeysEnabled = false
+  /// A persisted choice between the selected card and the screen under the pointer.
+  @Published var hotkeyTarget = BrightnessHotkeyTargetPreference().target
   /// Whether macOS currently grants this app the accessibility trust that a global
-  /// keyboard observer requires. Purely informational; never requested silently.
+  /// keyboard observer requires. Permission is requested only after an explicit user action.
   @Published var hasAccessibilityPermission = false
 
   // MARK: - Status item
@@ -243,10 +257,14 @@ final class DisplayBarController: NSObject, ObservableObject {
   // MARK: - Display scanning
 
   func scanAndRefresh() async {
+    scanGeneration &+= 1
+    let generation = scanGeneration
     do {
       let allDisplays = try await displayDiscovery.discoverDisplays()
+      guard generation == scanGeneration else { return }
       let controllableDisplays = DisplayBrightnessAccess.visibleDisplays(allDisplays)
       displays = orderedDisplays(controllableDisplays)
+      displayTopologyLogger.info("display scan online=\(allDisplays.count) visible=\(controllableDisplays.count)")
       // Taken before filtering, and before anything is read: the connection
       // controls are enabled or disabled from this, so it has to be the truth
       // about the whole topology rather than about the panels this app drives.
@@ -281,6 +299,7 @@ final class DisplayBarController: NSObject, ObservableObject {
         await refresh(scope: .afterTopologyChange(attachedDisplays: controllableDisplays.count))
       }
     } catch {
+      guard generation == scanGeneration else { return }
       failures.topology = BrightnessFailurePresenter.failure(for: error, operation: .scan)
     }
   }
@@ -380,6 +399,13 @@ final class DisplayBarController: NSObject, ObservableObject {
 
   deinit {
     wakeRefreshTask?.cancel()
+    topologyRefreshTask?.cancel()
+    if let screenParametersObserver {
+      NotificationCenter.default.removeObserver(screenParametersObserver)
+    }
+    if let applicationActivationObserver {
+      NotificationCenter.default.removeObserver(applicationActivationObserver)
+    }
     for observer in wakeObservers {
       NSWorkspace.shared.notificationCenter.removeObserver(observer)
     }

@@ -13,6 +13,7 @@ enum Help {
       brightness get [selector]         read brightness
       brightness set <value> [opts]     set brightness — 0.6 | 60% | +10% | -10% | restore
       brightness restore                restore saved brightness (retain failures for retry)
+      dimming get | set <8%…100%> | off   explicit software gamma; requires daemon and --display
       connect --display uuid:X          reconnect a display
       disconnect --display uuid:X       disconnect one display (never the last online display)
       capabilities                      report available brightness transports
@@ -20,6 +21,8 @@ enum Help {
       volume get | set <value>          DDC monitor speaker volume; set requires --display
       modes list                       resolutions, refresh rates, HiDPI and current mode
       modes set <mode-id>              apply an available mode; requires --display
+      modes preview <mode-id>          show for 10 seconds; restore on process exit
+      modes guarded-set <mode-id>      GUI mode change: keep via stdin within 15 seconds or restore
       profile list | show <name>       inspect saved brightness presets
       profile save <name>              capture brightness by UUID + transport (--replace to overwrite)
       profile apply <name>             preflight all displays, apply, roll back on failure

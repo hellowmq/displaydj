@@ -1,4 +1,10 @@
+import AppKit
 import Foundation
+import OSLog
+
+private let hotkeySettingsLogger = Logger(
+  subsystem: "io.github.hellowmq.displaydj", category: "BrightnessHotkey"
+)
 
 // MARK: - Hotkey opt-in
 
@@ -9,9 +15,39 @@ extension DisplayBarController {
 
   /// Turns the keyboard observers on or off and persists the choice.
   func setHotkeysEnabled(_ enabled: Bool) {
+    let wasEnabled = hotkeys.isEnabled
     hotkeys.setEnabled(enabled)
     hotkeysEnabled = hotkeys.isEnabled
     refreshAccessibilityPermission()
+    if BrightnessHotkeyPermissionRequest.shouldPrompt(
+      wasEnabled: wasEnabled,
+      isEnabled: hotkeysEnabled,
+      isTrusted: hasAccessibilityPermission
+    ) {
+      requestAccessibilityPermission()
+    }
+    hotkeySettingsLogger.info("brightness hotkeys enabled=\(self.hotkeysEnabled) accessibilityTrusted=\(self.hasAccessibilityPermission)")
+  }
+
+  func setHotkeyTarget(_ target: BrightnessHotkeyTarget) {
+    BrightnessHotkeyTargetPreference().target = target
+    hotkeyTarget = target
+    hotkeySettingsLogger.info("brightness hotkey target changed mode=\(target.rawValue, privacy: .public)")
+  }
+
+  /// Snapshot the pointer's screen at the key event. A missing mapping must stop the event;
+  /// falling back to the selected card could change a different panel without warning.
+  func hotkeyTargetStableID() -> String? {
+    let mouseScreenRuntimeID = NSScreen.screens.first { screen in
+      screen.frame.contains(NSEvent.mouseLocation)
+    }?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+      .flatMap { ($0 as? NSNumber)?.uint32Value }
+    return BrightnessHotkeyTargetResolver.stableID(
+      for: hotkeyTarget,
+      selectedStableID: selectedStableID,
+      mouseScreenRuntimeID: mouseScreenRuntimeID,
+      displays: displays
+    )
   }
 
   /// Re-reads the accessibility trust state without triggering a system prompt.
@@ -24,6 +60,11 @@ extension DisplayBarController {
   /// removing its own explanation, and did the one thing that would have acted on it nowhere.
   func refreshAccessibilityPermission() {
     hasAccessibilityPermission = hotkeys.reconcileObservers()
+  }
+
+  /// Requests the system-owned permission prompt after an explicit user action.
+  func requestAccessibilityPermission() {
+    hasAccessibilityPermission = hotkeys.requestAccessibilityPermission()
   }
 
   /// Opens the accessibility pane so the user can grant trust deliberately.
@@ -51,7 +92,7 @@ extension DisplayBarController {
       await refreshDisplay(stableID: displayStableID)
     case .retryWrite(let value, let displayStableID):
       clearFailure(for: displayStableID)
-      await setBrightness(value, for: displayStableID)
+      await setBrightness(value, for: displayStableID, synchronize: false)
     case .rescan:
       // A rescan answers a topology-level failure; per-display banners are re-evaluated by
       // the scan itself and are not silenced pre-emptively here.

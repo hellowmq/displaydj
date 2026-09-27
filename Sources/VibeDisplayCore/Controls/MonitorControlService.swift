@@ -13,6 +13,8 @@ public struct MonitorControlResult: Codable, Equatable, Sendable {
     public let verified: Bool
     public let dryRun: Bool
     public let error: String?
+    public let errorCode: String?
+    public let errorDetails: [String: String]?
 }
 
 /// Each control is probed independently. Brightness support never implies
@@ -46,7 +48,7 @@ public final class MonitorControlService {
                 let value = try reader(control, identity(display))
                 try Self.validate(value)
                 return result(display, control, value: value)
-            } catch { return result(display, control, error: String(describing: error)) }
+            } catch { return result(display, control, failure: Self.failure(error, control: control)) }
         }
     }
 
@@ -65,7 +67,7 @@ public final class MonitorControlService {
                 let observed = try writer(control, uuid, parsed.value, parsed.relative)
                 try Self.validate(observed)
                 return result(display, control, value: observed, requested: parsed.relative ? nil : parsed.value, verified: true)
-            } catch { return result(display, control, dryRun: dryRun, error: String(describing: error)) }
+            } catch { return result(display, control, dryRun: dryRun, failure: Self.failure(error, control: control)) }
         }
     }
 
@@ -94,10 +96,40 @@ public final class MonitorControlService {
         guard value.isFinite, (0...1).contains(value) else { throw VibeError(.backendFailure, "invalid DDC readback") }
     }
 
+    private struct ControlFailure {
+        let code: String
+        let message: String
+        let details: [String: String]?
+    }
+
+    private static func failure(_ error: Error, control: MonitorControl) -> ControlFailure {
+        let label = control == .volume ? "音量" : "对比度"
+        if let error = error as? DisplayDJError {
+            let message: String
+            switch error.code {
+            case .unsupported:
+                message = "这台显示器不支持通过 DDC 调节\(label)。"
+            case .transportFailure, .timeout:
+                message = "无法通过当前连接读取\(label)；请检查显示器 DDC/CI 和连接路径。"
+            case .displayNotFound:
+                message = "显示器已离线，请重新扫描。"
+            default:
+                message = "\(label)控制未能完成（\(error.code.rawValue)）。"
+            }
+            return ControlFailure(code: error.code.rawValue, message: message, details: error.details)
+        }
+        if let error = error as? VibeError {
+            return ControlFailure(code: error.code.rawValue, message: error.message, details: nil)
+        }
+        return ControlFailure(code: "backend_failure", message: "\(label)控制未能完成。", details: nil)
+    }
+
     private func result(_ d: DisplayInfo, _ control: MonitorControl, value: Double? = nil,
                         requested: Double? = nil, verified: Bool = false, dryRun: Bool = false,
-                        error: String? = nil) -> MonitorControlResult {
+                        failure: ControlFailure? = nil) -> MonitorControlResult {
         MonitorControlResult(displayUUID: d.uuid, slug: d.slug, control: control, value: value,
-                             requested: requested, ok: error == nil, verified: verified, dryRun: dryRun, error: error)
+                             requested: requested, ok: failure == nil, verified: verified,
+                             dryRun: dryRun, error: failure?.message,
+                             errorCode: failure?.code, errorDetails: failure?.details)
     }
 }

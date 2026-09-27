@@ -27,6 +27,11 @@ struct DaemonClient {
     /// Raw JSON object from the `data` field of the envelope.
     @discardableResult
     func call(_ method: String, _ path: String, body: [String: Any]? = nil) throws -> Any {
+        guard descriptor.version == VibeVersion.current else {
+            throw VibeError(.daemonUnavailable,
+                "running daemon version \(descriptor.version) differs from CLI \(VibeVersion.current)",
+                hint: "inspect `display-cli daemon status`, then restart the daemon with the installed CLI")
+        }
         guard let url = URL(string: descriptor.baseURL + path) else {
             throw VibeError(.invalidArgument, "bad daemon url for path \(path)")
         }

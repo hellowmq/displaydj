@@ -56,6 +56,9 @@ do {
     case "brightness", "b":
         try DisplayCommands.brightness(args)
 
+    case "dimming":
+        try SoftwareDimmingCommands.run(args)
+
     case "keepawake", "awake":
         try PowerCommands.keepAwake(args)
 

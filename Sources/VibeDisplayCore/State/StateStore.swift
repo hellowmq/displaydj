@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 /// On-disk state shared between the daemon and one-shot CLI invocations.
 public struct PersistedState: Codable, Equatable {
@@ -8,25 +9,27 @@ public struct PersistedState: Codable, Equatable {
     /// by display uuid. Persisted so that even `kill -9` on the daemon leaves
     /// enough information for `display-cli restore` to fix the screen.
     public var brightnessSnapshots: [String: Double]
+    /// Optional for state files written before transport tracking was added.
+    public var brightnessSnapshotTransports: [String: BrightnessTransport]?
     public var updatedAt: Date
 
     public init(version: Int = 1,
                 sessions: [AgentSession] = [],
                 brightnessSnapshots: [String: Double] = [:],
+                brightnessSnapshotTransports: [String: BrightnessTransport]? = nil,
                 updatedAt: Date = Date()) {
         self.version = version
         self.sessions = sessions
         self.brightnessSnapshots = brightnessSnapshots
+        self.brightnessSnapshotTransports = brightnessSnapshotTransports
         self.updatedAt = updatedAt
     }
 }
 
 /// Serialised, crash-tolerant access to `~/.displaydj/state.json`.
 ///
-/// Concurrency model: one in-process lock plus atomic file replacement. Two
-/// concurrent `display-cli` processes can both write safely; last writer wins
-/// on a whole-file basis, which is acceptable because the daemon is the only
-/// long-lived writer and CLI writes are single-field mutations.
+/// Mutations use a process lock around disk read, edit and atomic replacement.
+/// A cached read is useful for callers, but must never be the base of a write.
 public final class StateStore {
     public static let shared = StateStore()
 
@@ -59,24 +62,43 @@ public final class StateStore {
 
     @discardableResult
     public func mutate(_ body: (inout PersistedState) -> Void) -> PersistedState {
+        do { return try mutateChecked(body) }
+        catch {
+            Log.error("failed to persist state: \(error)")
+            return load()
+        }
+    }
+
+    /// Use for changes that must be durable before touching hardware.
+    @discardableResult
+    public func mutateChecked(_ body: (inout PersistedState) -> Void) throws -> PersistedState {
         lock.lock()
-        var state = cache ?? {
-            lock.unlock()
-            let loaded = load()
-            lock.lock()
-            return loaded
-        }()
+        defer { lock.unlock() }
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        let fd = open(url.appendingPathExtension("lock").path, O_CREAT | O_RDWR | O_NOFOLLOW, 0o600)
+        guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        defer { close(fd) }
+        guard flock(fd, LOCK_EX) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        defer { flock(fd, LOCK_UN) }
+
+        let stateOnDisk: PersistedState
+        if FileManager.default.fileExists(atPath: url.path) {
+            guard let data = try? Data(contentsOf: url),
+                  let decoded = try? JSONCoding.decoder.decode(PersistedState.self, from: data) else {
+                throw VibeError(.configInvalid, "refusing to overwrite unreadable state file")
+            }
+            stateOnDisk = decoded
+        } else {
+            stateOnDisk = PersistedState()
+        }
+        var state = stateOnDisk
         body(&state)
         state.updatedAt = Date()
-        cache = state
-        lock.unlock()
 
-        do {
-            let data = try JSONCoding.encoder.encode(state)
-            try Paths.writeSecure(data, to: url)
-        } catch {
-            Log.error("failed to persist state: \(error)")
-        }
+        let data = try JSONCoding.encoder.encode(state)
+        try Paths.writeSecure(data, to: url)
+        cache = state
         return state
     }
 

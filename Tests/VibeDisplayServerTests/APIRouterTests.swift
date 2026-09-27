@@ -86,6 +86,9 @@ final class APIRouterTests: XCTestCase {
             "POST /v1/brightness",
             "POST /v1/brightness/snapshot",
             "POST /v1/brightness/restore",
+            "GET /v1/software-dimming",
+            "POST /v1/software-dimming",
+            "DELETE /v1/software-dimming",
             "GET /v1/keepawake",
             "POST /v1/keepawake",
             "POST /v1/keepawake/:id/renew",
@@ -104,7 +107,7 @@ final class APIRouterTests: XCTestCase {
         ] {
             XCTAssertTrue(routes.contains(expected), "route table missing \(expected)")
         }
-        XCTAssertEqual(routes.count, 29, "route table should list exactly the 29 wired endpoints")
+        XCTAssertEqual(routes.count, 32, "route table should list exactly the 32 wired endpoints")
     }
 
     // MARK: - keep-awake (pure registry, no hardware)

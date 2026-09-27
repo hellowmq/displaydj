@@ -1,4 +1,12 @@
 import DisplayDJCore
+import OSLog
+
+private let brightnessWriteLogger = Logger(
+  subsystem: "io.github.hellowmq.displaydj", category: "BrightnessWrite"
+)
+private let brightnessHotkeyLogger = Logger(
+  subsystem: "io.github.hellowmq.displaydj", category: "BrightnessHotkey"
+)
 
 // MARK: - Write
 
@@ -18,10 +26,17 @@ extension DisplayBarController {
   /// So a missing starting point is fetched rather than treated as a refusal. The read is
   /// awaited before stepping because a relative change is meaningless without it.
   func adjustBrightnessViaHotkey(by delta: Int) async {
-    if displayedBrightness == nil {
-      await refreshSelectedDisplayOnDemand()
+    if displays.isEmpty {
+      await scanAndRefresh()
     }
-    guard let stableID = selectedStableID, !stableID.isEmpty else { return }
+    guard let stableID = hotkeyTargetStableID() else {
+      brightnessHotkeyLogger.warning("brightness hotkey skipped: target screen unavailable")
+      return
+    }
+    brightnessHotkeyLogger.debug("brightness hotkey target index=\(self.displays.firstIndex(where: { $0.stableID == stableID }) ?? -1) mode=\(self.hotkeyTarget.rawValue, privacy: .public)")
+    if displayedBrightness(for: stableID) == nil {
+      await refreshDisplay(stableID: stableID, trigger: .userRequest)
+    }
     adjustBrightness(by: delta, for: stableID)
   }
 
@@ -32,20 +47,45 @@ extension DisplayBarController {
     Task { await setBrightness(target, for: stableID) }
   }
 
-  func setBrightness(_ value: Int, for stableID: String) async {
+  func setBrightness(_ value: Int, for stableID: String, synchronize: Bool = true) async {
     guard !displays.isEmpty else { return }
+    guard !isPreparingBrightnessSync else {
+      failures.topology = BrightnessFailure(
+        summary: "正在准备多屏同步",
+        suggestion: "正在读取各屏硬件亮度，请稍后再调节。",
+        recovery: .unavailable
+      )
+      return
+    }
     guard !stableID.isEmpty else {
       failures.topology = BrightnessFailurePresenter.noStableIdentity
       return
     }
 
     let target = BrightnessAccessibility.clamp(value)
-    intents.submit(BrightnessIntent(value: target, displayStableID: stableID))
-    setIntendedForDisplay(target, id: stableID)
+    var planned = [BrightnessIntent(value: target, displayStableID: stableID)]
+    if synchronize && isBrightnessSyncEnabled {
+      let ids = displays.compactMap(\.stableID)
+      var values: [String: Int] = [:]
+      for id in ids { values[id] = displayedBrightness(for: id) }
+      if ids.count == displays.count,
+        let group = BrightnessSyncPlan.intents(
+          sourceID: stableID, target: target, orderedIDs: ids, current: values
+        ) {
+        planned = group
+        brightnessWriteLogger.info("synchronized brightness intent targetCount=\(group.count)")
+      } else {
+        stopBrightnessSyncForMissingBaseline()
+      }
+    }
+    for intent in planned {
+      intents.submit(intent)
+      setIntendedForDisplay(intent.value, id: intent.displayStableID)
+      clearFailure(for: intent.displayStableID)
+    }
     // Starting a write on this display supersedes only this display's own banner. Banners
     // are filed per display, so a nudge on one card can no longer erase a neighbour's error
     // before the user has read it, along with the retry button that was the way out of it.
-    clearFailure(for: stableID)
 
     if let existing = writeTask {
       await existing.value
@@ -102,6 +142,8 @@ extension DisplayBarController {
       // just removed — invisible state with no card, waiting to reappear on replug.
       guard !intents.isActiveOrphaned else { return }
       setBrightnessForDisplay(verified, id: intent.displayStableID)
+      let index = displays.firstIndex(where: { $0.stableID == intent.displayStableID }) ?? -1
+      brightnessWriteLogger.info("brightness write verified displayIndex=\(index) requested=\(intent.value) observed=\(verified)")
       // Succeeding on one display resolves only that display's banner; every other card's
       // failure is still unresolved and keeps its retry button.
       clearFailure(for: intent.displayStableID)
@@ -116,6 +158,9 @@ extension DisplayBarController {
       // there is no card to draw it on, so it would not be shown at all — it would only sit
       // in the store waiting to surface on a monitor the user has since plugged back in.
       guard !intents.isActiveOrphaned else { return }
+      let index = displays.firstIndex(where: { $0.stableID == intent.displayStableID }) ?? -1
+      let code = (error as? DisplayDJError)?.code.rawValue ?? String(describing: type(of: error))
+      brightnessWriteLogger.error("brightness write failed displayIndex=\(index) code=\(code, privacy: .public)")
       setFailure(
         BrightnessFailurePresenter.failure(
           for: error,

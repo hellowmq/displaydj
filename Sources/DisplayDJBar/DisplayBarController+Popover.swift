@@ -49,6 +49,13 @@ extension DisplayBarController {
     hotkeys.activateStoredPreference()
     hotkeysEnabled = hotkeys.isEnabled
     refreshAccessibilityPermission()
+    applicationActivationObserver = NotificationCenter.default.addObserver(
+      forName: NSApplication.didBecomeActiveNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor [weak self] in self?.refreshAccessibilityPermission() }
+    }
 
     // Polling is started only when the popover becomes visible (see NSPopoverDelegate).
 
@@ -68,6 +75,25 @@ extension DisplayBarController {
     connectionSupported = probeConnectionSupport()
     refreshDisconnectedDisplays()
     loadPreferences()
+    screenParametersObserver = NotificationCenter.default.addObserver(
+      forName: NSApplication.didChangeScreenParametersNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor [weak self] in self?.scheduleTopologyRescan() }
+    }
+    // Populate the status item before the first open when discovery is ready.
+    // A temporarily empty result is retried while the popover is visible.
+    Task { await scanAndRefresh() }
+  }
+
+  func scheduleTopologyRescan() {
+    topologyRefreshTask?.cancel()
+    topologyRefreshTask = Task { @MainActor [weak self] in
+      try? await Task.sleep(for: .milliseconds(400))
+      guard !Task.isCancelled, let self else { return }
+      await self.scanAndRefresh()
+    }
   }
 
   // MARK: - Popover

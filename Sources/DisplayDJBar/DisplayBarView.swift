@@ -53,6 +53,32 @@ struct DisplayBarView: View {
       }
 
       Divider().padding(.vertical, 8)
+      if controller.displays.count > 1 {
+        VStack(alignment: .leading, spacing: 5) {
+          HStack(spacing: 8) {
+            Text("同步硬件亮度")
+              .font(.system(size: 11, weight: .medium))
+            Spacer(minLength: 8)
+            Toggle(
+              "同步硬件亮度",
+              isOn: Binding(
+                get: { controller.isBrightnessSyncEnabled },
+                set: { enabled in Task { await controller.setBrightnessSyncEnabled(enabled) } }
+              )
+            )
+            .labelsHidden()
+            .toggleStyle(.switch)
+            .controlSize(.mini)
+            .disabled(controller.isPreparingBrightnessSync || controller.isWriting)
+          }
+          Text("调整任一屏时，其他屏按相同百分点变化；需要每屏都能读取硬件亮度。")
+            .font(.system(size: 10))
+            .foregroundColor(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.bottom, 8)
+      }
       Button("显示设置与预设…") { controller.showDisplayTools() }
         .font(.system(size: 11))
         .padding(.bottom, 8)
@@ -306,7 +332,7 @@ private struct DisplayCard: View {
           Task { await controller.setBrightness(intValue, for: stableID) }
         }
       )
-      .disabled(!canAdjustRelatively || isEditing)
+      .disabled(!canAdjustRelatively || isEditing || controller.isPreparingBrightnessSync)
 
       // This display's own failure, drawn on this display's card. A single shared strip at
       // the bottom could not say which monitor it was about, and could only ever show one.

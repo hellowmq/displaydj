@@ -111,6 +111,9 @@ enum DaemonCommands {
                                         logPath: logPath, health: health,
                                         launchAgent: agent)) {
             var text = "daemon: running\n  url: \(descriptor.baseURL)\n  pid: \(descriptor.pid)\n  version: \(descriptor.version)"
+            if descriptor.version != VibeVersion.current {
+                text += "\n  warning: running daemon version differs from this CLI (\(VibeVersion.current)); restart with the installed CLI"
+            }
             if let health {
                 text += "\n  uptime: \(health.uptimeSeconds)s\n  sessions: \(health.activeSessions)\n  leases: \(health.activeLeases)"
             } else {

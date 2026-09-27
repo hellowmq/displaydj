@@ -117,6 +117,8 @@ public struct DisplayConnectionController: Sendable {
   private let selectorResolver: DisplaySelectorResolver
   private let safety: DisplayConnectionSafety
   private let ledger: DisplayConnectionIntentLedger
+  private let verificationAttempts: Int
+  private let verificationDelay: Duration
 
   public init(
     discovery: any DisplayDiscovering,
@@ -124,7 +126,9 @@ public struct DisplayConnectionController: Sendable {
     store: any DisplayConnectionRecordStoring = NoOpDisplayConnectionRecordStore(),
     selectorResolver: DisplaySelectorResolver = DisplaySelectorResolver(),
     safety: DisplayConnectionSafety = DisplayConnectionSafety(),
-    ledger: DisplayConnectionIntentLedger = .shared
+    ledger: DisplayConnectionIntentLedger = .shared,
+    verificationAttempts: Int = 25,
+    verificationDelay: Duration = .milliseconds(200)
   ) {
     self.discovery = discovery
     self.transaction = transaction
@@ -132,6 +136,8 @@ public struct DisplayConnectionController: Sendable {
     self.selectorResolver = selectorResolver
     self.safety = safety
     self.ledger = ledger
+    self.verificationAttempts = max(1, verificationAttempts)
+    self.verificationDelay = verificationDelay
   }
 
   /// The production controller, using live discovery and the private entry point.
@@ -177,13 +183,15 @@ public struct DisplayConnectionController: Sendable {
       onlineCount: displays.count
     )
 
+    // Save recovery identity before touching the desktop. A transaction can
+    // mutate the display and still fail or publish topology late; the record
+    // must survive that ambiguous result so a later connect can find it.
+    try remember(online)
     // Announced before the call: the reconfiguration it emits lands on another
     // thread, and may arrive while this call is still running.
     ledger.noteIntent(runtimeID: online.runtimeID)
     try transaction.setEnabled(false, forRuntimeID: online.runtimeID)
     try await requireAbsent(online.runtimeID, selector: selector)
-
-    try remember(online)
 
     return DisplayConnectionOutcome(
       display: online,
@@ -202,6 +210,9 @@ public struct DisplayConnectionController: Sendable {
     let displays = try await discovery.discoverDisplays()
 
     if let online = try onlineMatch(for: selector, among: displays) {
+      // A previous connect can complete after its caller timed out. A retry
+      // must clear the saved disconnect intent, not leave a stale record.
+      try forget(runtimeID: online.runtimeID, stableID: online.stableID)
       return DisplayConnectionOutcome(
         display: online,
         requestedState: .connected,
@@ -215,7 +226,7 @@ public struct DisplayConnectionController: Sendable {
     try transaction.setEnabled(true, forRuntimeID: runtimeID)
     let restored = try await requirePresent(runtimeID, selector: selector)
 
-    try forget(runtimeID: runtimeID)
+    try forget(runtimeID: runtimeID, stableID: restored.stableID)
 
     return DisplayConnectionOutcome(
       display: restored,
@@ -231,49 +242,60 @@ public struct DisplayConnectionController: Sendable {
     _ runtimeID: UInt32,
     selector: DisplaySelector
   ) async throws {
-    let after = try await discovery.discoverDisplays()
-
-    guard !after.contains(where: { $0.runtimeID == runtimeID }) else {
-      throw DisplayDJError(
-        code: .verificationFailed,
-        message: """
-          The display for runtime:\(runtimeID) is still online after the \
-          disconnect request, so the change did not take effect.
-          """,
-        operation: .write,
-        displayID: SelectorDescription.text(selector),
-        details: [
-          "phase": "verification",
-          "runtimeID": String(runtimeID),
-          "onlineAfterCount": String(after.count),
-        ]
-      )
+    for attempt in 0..<verificationAttempts {
+      let after = try await discovery.discoverDisplays()
+      if !after.contains(where: { $0.runtimeID == runtimeID }) { return }
+      if attempt + 1 < verificationAttempts { try await Task.sleep(for: verificationDelay) }
     }
+    throw DisplayDJError(
+      code: .verificationFailed,
+      message: "The display remained online within the verification window; reconnect record retained.",
+      operation: .write,
+      displayID: SelectorDescription.text(selector),
+      details: [
+        "phase": "verification",
+        "runtimeID": String(runtimeID),
+        "attempts": String(verificationAttempts),
+      ]
+    )
   }
 
   private func requirePresent(
     _ runtimeID: UInt32,
     selector: DisplaySelector
   ) async throws -> DisplayDescriptor {
-    let after = try await discovery.discoverDisplays()
-
-    guard let restored = after.first(where: { $0.runtimeID == runtimeID }) else {
-      throw DisplayDJError(
-        code: .verificationFailed,
-        message: """
-          The display for runtime:\(runtimeID) did not come back online after \
-          the connect request.
-          """,
-        operation: .write,
-        displayID: SelectorDescription.text(selector),
-        details: [
-          "phase": "verification",
-          "runtimeID": String(runtimeID),
-        ]
-      )
+    let expectedStableID: String?
+    if case .stableID(let value) = selector {
+      expectedStableID = try DisplayStableSelector.normalizeInput(value).lowercased()
+    } else {
+      expectedStableID = nil
     }
-
-    return restored
+    // CGSCompleteDisplayConfiguration can return before CoreGraphics has
+    // published the new online topology. Bound the wait and re-enumerate;
+    // accepting the same runtime ID alone could select a different display.
+    for attempt in 0..<verificationAttempts {
+      let after = try await discovery.discoverDisplays()
+      if let restored = after.first(where: { display in
+        if let expectedStableID {
+          return display.stableID.flatMap(DisplayStableSelector.normalizeDescriptorID) == expectedStableID
+        }
+        return display.runtimeID == runtimeID
+      }) {
+        return restored
+      }
+      if attempt + 1 < verificationAttempts { try await Task.sleep(for: verificationDelay) }
+    }
+    throw DisplayDJError(
+      code: .verificationFailed,
+      message: "The display did not come back online within the verification window.",
+      operation: .write,
+      displayID: SelectorDescription.text(selector),
+      details: [
+        "phase": "verification",
+        "runtimeID": String(runtimeID),
+        "attempts": String(verificationAttempts),
+      ]
+    )
   }
 
   // MARK: - Lookup
@@ -332,7 +354,7 @@ public struct DisplayConnectionController: Sendable {
   // MARK: - Records
 
   private func remember(_ display: DisplayDescriptor) throws {
-    var records = (try? store.loadRecords()) ?? []
+    var records = try store.loadRecords()
     records.removeAll { $0.runtimeID == display.runtimeID }
     records.append(
       DisplayConnectionRecord(
@@ -348,9 +370,8 @@ public struct DisplayConnectionController: Sendable {
       throw DisplayDJError(
         code: .internalFailure,
         message: """
-          '\(display.name)' was disconnected, but the reconnect record could \
-          not be saved. Reconnect with runtime:\(display.runtimeID), or replug \
-          the display.
+          The reconnect record for '\(display.name)' could not be saved, so \
+          the display was not disconnected.
           """,
         operation: .write,
         displayID: display.stableID ?? "runtime:\(display.runtimeID)",
@@ -362,9 +383,13 @@ public struct DisplayConnectionController: Sendable {
     }
   }
 
-  private func forget(runtimeID: UInt32) throws {
-    var records = (try? store.loadRecords()) ?? []
-    records.removeAll { $0.runtimeID == runtimeID }
+  private func forget(runtimeID: UInt32, stableID: String?) throws {
+    var records = try store.loadRecords()
+    let normalized = stableID.flatMap(DisplayStableSelector.normalizeDescriptorID)
+    records.removeAll {
+      $0.runtimeID == runtimeID ||
+        (normalized != nil && $0.stableID.flatMap(DisplayStableSelector.normalizeDescriptorID) == normalized)
+    }
     try store.saveRecords(records)
   }
 

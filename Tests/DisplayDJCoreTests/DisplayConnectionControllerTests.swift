@@ -53,6 +53,31 @@ private struct WorldDiscovery: DisplayDiscovering {
   }
 }
 
+private final class DelayedVisibility: @unchecked Sendable {
+  private let lock = NSLock()
+  private var remaining: Int
+
+  init(_ reads: Int) { remaining = reads }
+
+  func shouldHide() -> Bool {
+    lock.lock(); defer { lock.unlock() }
+    guard remaining > 0 else { return false }
+    remaining -= 1
+    return true
+  }
+}
+
+private struct DelayedWorldDiscovery: DisplayDiscovering {
+  let world: ConnectionWorld
+  let descriptor: DisplayDescriptor
+  let delay: DelayedVisibility
+
+  func discoverDisplays() async throws -> [DisplayDescriptor] {
+    guard world.isOnline(descriptor.runtimeID) else { return [] }
+    return delay.shouldHide() ? [] : [descriptor]
+  }
+}
+
 private struct WorldTransaction: DisplayConfigurationTransactionApplying {
   let world: ConnectionWorld
   let mutatesWorld: Bool
@@ -73,6 +98,13 @@ private struct WorldTransaction: DisplayConfigurationTransactionApplying {
       throw thrownError
     }
     world.apply(runtimeID, enabled, mutate: mutatesWorld)
+  }
+}
+
+private struct FailingConnectionRecordStore: DisplayConnectionRecordStoring {
+  func loadRecords() throws -> [DisplayConnectionRecord] { [] }
+  func saveRecords(_ records: [DisplayConnectionRecord]) throws {
+    throw DisplayDJError(code: .internalFailure, message: "save failed", operation: .write)
   }
 }
 
@@ -113,7 +145,9 @@ private func makeController(
       mutatesWorld: mutatesWorld,
       thrownError: thrownError
     ),
-    store: store
+    store: store,
+    verificationAttempts: 3,
+    verificationDelay: .zero
   )
 }
 
@@ -189,6 +223,24 @@ func lastOnlineDisplayIsRefused() async {
 
   #expect(error?.code == .conflict)
   #expect(error?.details["reason"] == "last-online-display")
+  #expect(world.calls.isEmpty)
+  #expect(world.isOnline(1))
+}
+
+@Test("A failed recovery-record write prevents a physical disconnect")
+func failedRecordSaveDoesNotDisconnect() async {
+  let first = makeDisplay(runtimeID: 1, stableID: "uuid:first")
+  let second = makeDisplay(runtimeID: 2, stableID: "uuid:second")
+  let world = ConnectionWorld(online: [1, 2])
+  let controller = makeController(
+    world: world, displays: [first, second], store: FailingConnectionRecordStore()
+  )
+
+  let error = await displayError {
+    try await controller.setState(.disconnected, for: .runtimeID(1))
+  }
+
+  #expect(error?.code == .internalFailure)
   #expect(world.calls.isEmpty)
   #expect(world.isOnline(1))
 }
@@ -344,6 +396,56 @@ func offlineDisplayIsReconnectedByStableID() async throws {
   #expect(outcome.observedState == .connected)
   #expect(outcome.display.runtimeID == 7)
   #expect(world.isOnline(7))
+}
+
+@Test("A delayed online topology is allowed to settle after connect")
+func delayedConnectVisibilityIsVerifiedWithoutRetryingTransaction() async throws {
+  let first = makeDisplay(runtimeID: 7, stableID: "uuid:first")
+  let world = ConnectionWorld(online: [])
+  let store = InMemoryDisplayConnectionRecordStore(
+    records: [DisplayConnectionRecord(runtimeID: 7, stableID: "uuid:first", name: "First")]
+  )
+  let controller = DisplayConnectionController(
+    discovery: DelayedWorldDiscovery(world: world, descriptor: first, delay: DelayedVisibility(2)),
+    transaction: WorldTransaction(world: world), store: store,
+    verificationAttempts: 4, verificationDelay: .zero
+  )
+
+  let outcome = try await controller.setState(.connected, for: .stableID("uuid:first"))
+  #expect(outcome.wasVerified)
+  #expect(world.calls.count == 1)
+  #expect(try store.loadRecords().isEmpty)
+}
+
+@Test("A reused runtime ID cannot satisfy a different stable display selector")
+func connectRejectsDifferentDisplayAtOldRuntimeID() async {
+  let other = makeDisplay(runtimeID: 7, stableID: "uuid:other")
+  let world = ConnectionWorld(online: [])
+  let store = InMemoryDisplayConnectionRecordStore(
+    records: [DisplayConnectionRecord(runtimeID: 7, stableID: "uuid:first", name: "First")]
+  )
+  let controller = makeController(world: world, displays: [other], store: store)
+
+  let error = await displayError {
+    try await controller.setState(.connected, for: .stableID("uuid:first"))
+  }
+  #expect(error?.code == .verificationFailed)
+  #expect(world.calls.count == 1)
+}
+
+@Test("An already reconnected display clears its stale disconnect record")
+func alreadyOnlineConnectClearsRecord() async throws {
+  let first = makeDisplay(runtimeID: 7, stableID: "uuid:first")
+  let world = ConnectionWorld(online: [7])
+  let store = InMemoryDisplayConnectionRecordStore(
+    records: [DisplayConnectionRecord(runtimeID: 7, stableID: "uuid:first", name: "First")]
+  )
+  let controller = makeController(world: world, displays: [first], store: store)
+
+  let outcome = try await controller.setState(.connected, for: .stableID("uuid:first"))
+  #expect(outcome.wasVerified)
+  #expect(world.calls.isEmpty)
+  #expect(try store.loadRecords().isEmpty)
 }
 
 @Test("An offline stable ID without a saved record is a lookup failure")

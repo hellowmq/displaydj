@@ -59,6 +59,7 @@ public final class BrightnessService {
     private let lock = NSLock()
     private var capabilityCache: [String: DisplayCapability] = [:]
     private var snapshots: [String: Double] = [:]
+    private var snapshotTransports: [String: BrightnessTransport] = [:]
     /// Backend actually chosen for a display, keyed by uuid.
     private var boundTransport: [String: BrightnessTransport] = [:]
     /// Where auto-snapshots are persisted so a fresh process can still restore.
@@ -171,6 +172,47 @@ public final class BrightnessService {
         backend(for: display).read(display)
     }
 
+    /// Explicit software dimming. It changes gamma tables, never panel backlight.
+    /// The caller must live in the resident daemon for the effect to persist.
+    public func softwareDimming(_ selector: DisplaySelector) throws -> [BrightnessReading] {
+        let displays = try selector.resolve(in: registry.displays(forceRefresh: true))
+        guard !displays.isEmpty else { throw VibeError(.displayNotFound, "no display for software dimming") }
+        return displays.map { display in
+            BrightnessReading(displayUUID: display.uuid, slug: display.slug,
+                              value: gamma.read(display) ?? 1, transport: .gamma)
+        }
+    }
+
+    public func setSoftwareDimming(_ value: Double, to selector: DisplaySelector) throws -> [BrightnessApplyResult] {
+        guard value.isFinite, (GammaBackend.floor...1).contains(value) else {
+            throw VibeError(.invalidArgument, "software dimming must be between 8% and 100%; use off to restore colors")
+        }
+        let displays = try selector.resolve(in: registry.displays(forceRefresh: true))
+        guard !displays.isEmpty else { throw VibeError(.displayNotFound, "no display for software dimming") }
+        return displays.map { display in
+            let previous = gamma.read(display) ?? 1
+            let wrote = gamma.write(display, value: value)
+            let observed = gamma.read(display)
+            let ok = wrote && observed.map { abs($0 - value) <= 0.001 } == true
+            return BrightnessApplyResult(displayUUID: display.uuid, slug: display.slug,
+                                         previous: previous, requested: value, applied: observed,
+                                         transport: .gamma, ok: ok,
+                                         error: ok ? nil : "software dimming was not applied")
+        }
+    }
+
+    public func stopSoftwareDimming(_ selector: DisplaySelector) throws -> [BrightnessApplyResult] {
+        let displays = try selector.resolve(in: registry.displays(forceRefresh: true))
+        guard !displays.isEmpty else { throw VibeError(.displayNotFound, "no display for software dimming") }
+        return displays.map { display in
+            let previous = gamma.read(display) ?? 1
+            gamma.release(display)
+            return BrightnessApplyResult(displayUUID: display.uuid, slug: display.slug,
+                                         previous: previous, requested: 1, applied: 1,
+                                         transport: .gamma, ok: true)
+        }
+    }
+
     // MARK: - Write
 
     @discardableResult
@@ -208,7 +250,14 @@ public final class BrightnessService {
         if case .restoreSnapshot = target {
             snapshotTaken = false
         } else {
-            snapshotTaken = recordSnapshotIfNeeded(display, current: current)
+            do {
+                snapshotTaken = try recordSnapshotIfNeeded(display, current: current, transport: backend.transport)
+            } catch {
+                return BrightnessApplyResult(displayUUID: display.uuid, slug: display.slug,
+                                             previous: current, requested: current, applied: nil,
+                                             transport: backend.transport, ok: false,
+                                             error: "cannot save recovery point before write: \(error)")
+            }
         }
 
         let requested: Double
@@ -228,6 +277,15 @@ public final class BrightnessService {
                                              transport: backend.transport, ok: false,
                                              error: "no snapshot recorded for this display")
             }
+            lock.lock()
+            let originalTransport = snapshotTransports[display.uuid]
+            lock.unlock()
+            guard originalTransport == backend.transport else {
+                return BrightnessApplyResult(displayUUID: display.uuid, slug: display.slug,
+                                             previous: current, requested: saved, applied: nil,
+                                             transport: backend.transport, ok: false,
+                                             error: "snapshot transport is missing or changed; manual recovery required")
+            }
             requested = saved
         }
 
@@ -235,13 +293,19 @@ public final class BrightnessService {
                               from: current, to: requested, ramp: ramp)
 
         let observed = wrote ? backend.read(display) : nil
-        let ok = wrote && observed != nil
+        // A successful API return and any readable value do not prove that the
+        // requested brightness took effect. Allow ordinary display quantization.
+        let ok = wrote && observed.map { abs($0 - requested) <= 0.02 } == true
 
         if ok, case .restoreSnapshot = target {
             lock.lock()
             snapshots.removeValue(forKey: display.uuid)
+            snapshotTransports.removeValue(forKey: display.uuid)
             lock.unlock()
-            store.mutate { $0.brightnessSnapshots.removeValue(forKey: display.uuid) }
+            store.mutate {
+                $0.brightnessSnapshots.removeValue(forKey: display.uuid)
+                $0.brightnessSnapshotTransports?.removeValue(forKey: display.uuid)
+            }
             if backend.transport == .gamma { gamma.release(display) }
         }
 
@@ -254,26 +318,38 @@ public final class BrightnessService {
             transport: backend.transport,
             ok: ok,
             snapshotTaken: snapshotTaken,
-            error: ok ? nil : "backend \(backend.transport.rawValue) rejected the write"
+            error: ok ? nil : "backend \(backend.transport.rawValue) did not confirm the requested brightness"
         )
     }
 
     /// Record the pre-mutation value for a display that has never been touched.
     /// Idempotent (first writer wins, so nested sessions cannot clobber the
     /// user's original) and persisted so `restore` works after a process exit.
-    private func recordSnapshotIfNeeded(_ display: DisplayInfo, current: Double) -> Bool {
+    private func recordSnapshotIfNeeded(_ display: DisplayInfo, current: Double,
+                                        transport: BrightnessTransport) throws -> Bool {
         lock.lock()
-        let isFirst = snapshots[display.uuid] == nil
-        if isFirst { snapshots[display.uuid] = current }
-        lock.unlock()
-        if isFirst {
-            store.mutate { state in
+        defer { lock.unlock() }
+        if snapshots[display.uuid] != nil {
+            guard snapshotTransports[display.uuid] == transport else {
+                throw VibeError(.backendFailure, "existing recovery point uses another or unknown transport")
+            }
+            return false
+        }
+        let persisted = try store.mutateChecked { state in
                 if state.brightnessSnapshots[display.uuid] == nil {
                     state.brightnessSnapshots[display.uuid] = current
+                    var transports = state.brightnessSnapshotTransports ?? [:]
+                    transports[display.uuid] = transport
+                    state.brightnessSnapshotTransports = transports
                 }
-            }
         }
-        return isFirst
+        guard let saved = persisted.brightnessSnapshots[display.uuid],
+              persisted.brightnessSnapshotTransports?[display.uuid] == transport else {
+            throw VibeError(.backendFailure, "existing recovery point uses another or unknown transport")
+        }
+        snapshots[display.uuid] = saved
+        snapshotTransports[display.uuid] = transport
+        return true
     }
 
     private func performWrite(backend: BrightnessBackend,
@@ -311,13 +387,33 @@ public final class BrightnessService {
         for display in displays {
             lock.lock()
             let already = snapshots[display.uuid] != nil
+            let originalTransport = snapshotTransports[display.uuid]
             lock.unlock()
-            if already { continue }
-            guard let value = backend(for: display).read(display) else { continue }
+            let chosen = backend(for: display)
+            if already {
+                guard originalTransport == chosen.transport else {
+                    throw VibeError(.backendFailure, "existing recovery point uses another or unknown transport")
+                }
+                continue
+            }
+            guard let value = chosen.read(display) else { continue }
+            let persisted = try store.mutateChecked { state in
+                if state.brightnessSnapshots[display.uuid] == nil {
+                    state.brightnessSnapshots[display.uuid] = value
+                    var transports = state.brightnessSnapshotTransports ?? [:]
+                    transports[display.uuid] = chosen.transport
+                    state.brightnessSnapshotTransports = transports
+                }
+            }
+            guard let saved = persisted.brightnessSnapshots[display.uuid],
+                  persisted.brightnessSnapshotTransports?[display.uuid] == chosen.transport else {
+                throw VibeError(.backendFailure, "existing recovery point uses another or unknown transport")
+            }
             lock.lock()
-            snapshots[display.uuid] = value
+            snapshots[display.uuid] = saved
+            snapshotTransports[display.uuid] = chosen.transport
             lock.unlock()
-            taken[display.uuid] = value
+            taken[display.uuid] = saved
         }
         return taken
     }
@@ -327,16 +423,24 @@ public final class BrightnessService {
         return snapshots
     }
 
-    public func seedSnapshots(_ values: [String: Double]) {
+    public func snapshotTransportValues() -> [String: BrightnessTransport] {
+        lock.lock(); defer { lock.unlock() }
+        return snapshotTransports
+    }
+
+    public func seedSnapshots(_ values: [String: Double],
+                              transports: [String: BrightnessTransport] = [:]) {
         lock.lock(); defer { lock.unlock() }
         for (k, v) in values where snapshots[k] == nil {
             snapshots[k] = v
+            snapshotTransports[k] = transports[k]
         }
     }
 
     public func clearSnapshots() {
         lock.lock(); defer { lock.unlock() }
         snapshots.removeAll()
+        snapshotTransports.removeAll()
     }
 
     /// Put everything back and drop all gamma tables. The last thing the daemon
@@ -351,7 +455,9 @@ public final class BrightnessService {
         // of what the user's screen looked like. Recover the snapshots the
         // previous process persisted, so `restore` still lands exactly where
         // it started even across process boundaries.
-        seedSnapshots(store.load().brightnessSnapshots)
+        let persisted = store.load()
+        seedSnapshots(persisted.brightnessSnapshots,
+                      transports: persisted.brightnessSnapshotTransports ?? [:])
         lock.lock()
         pending = snapshots
         lock.unlock()
@@ -365,7 +471,10 @@ public final class BrightnessService {
         // Failed and unplugged displays retain their recovery points for a later retry.
         let restored = Set(results.filter(\.ok).map(\.displayUUID))
         store.mutate { state in
-            for uuid in restored { state.brightnessSnapshots.removeValue(forKey: uuid) }
+            for uuid in restored {
+                state.brightnessSnapshots.removeValue(forKey: uuid)
+                state.brightnessSnapshotTransports?.removeValue(forKey: uuid)
+            }
         }
         return results
     }

@@ -75,7 +75,7 @@ enum BrightnessAccessibility {
   /// What the hotkey switch tells assistive technology its state is — decided by the same
   /// value that decides whether the shortcut actually fires.
   ///
-  /// This used to be `.accessibilityValue(hotkeyDisplayName)`, i.e. the constant "⌃⌘= / ⌃⌘-".
+  /// This used to be `.accessibilityValue(hotkeyDisplayName)`, i.e. a constant shortcut pair.
   /// On a `Toggle`, `accessibilityValue` *replaces* the on/off state VoiceOver would otherwise
   /// speak, so the switch announced the same sentence in every state and never said whether it
   /// was on. The combination it named is already spoken as part of the label beside it; the

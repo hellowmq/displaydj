@@ -17,7 +17,13 @@ extension DisplayBarController: NSPopoverDelegate {
         else { return }
         self.isPollingRead = true
         defer { self.isPollingRead = false }
-        await self.refreshAllDisplays()
+        if self.displays.isEmpty {
+          // A first scan can finish before macOS has published the display.
+          // Re-enumerate instead of polling an empty list forever.
+          await self.scanAndRefresh()
+        } else {
+          await self.refreshAllDisplays()
+        }
       }
     }
     Task { await scanAndRefresh() }
