@@ -20,6 +20,8 @@ public struct AgentSession: Codable, Equatable, Identifiable, Sendable {
     public var keepAwakeLeaseIDs: [String]
     /// Brightness this session recorded before it changed anything.
     public var snapshot: [String: Double]
+    /// Claims captured at begin. Missing in legacy sessions, which cannot auto-write.
+    public var brightnessRevisions: [String: String]?
     public var transitions: [PhaseTransition]
     public var metadata: [String: String]
     /// Set when the reaper (not the client) ended the session.
@@ -54,6 +56,7 @@ public struct AgentSession: Codable, Equatable, Identifiable, Sendable {
                 heartbeatCount: Int = 0,
                 keepAwakeLeaseIDs: [String] = [],
                 snapshot: [String: Double] = [:],
+                brightnessRevisions: [String: String]? = nil,
                 transitions: [PhaseTransition] = [],
                 metadata: [String: String] = [:],
                 note: String? = nil,
@@ -70,6 +73,7 @@ public struct AgentSession: Codable, Equatable, Identifiable, Sendable {
         self.heartbeatCount = heartbeatCount
         self.keepAwakeLeaseIDs = keepAwakeLeaseIDs
         self.snapshot = snapshot
+        self.brightnessRevisions = brightnessRevisions
         self.transitions = transitions
         self.metadata = metadata
         self.endedBy = endedBy

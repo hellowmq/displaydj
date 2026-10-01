@@ -17,6 +17,7 @@ import SwiftUI
 /// would let one readout keep the `%` while another quietly drops it, which is the exact
 /// drift the shared formatter exists to prevent.
 struct BrightnessReadout: View {
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   let value: Int?
 
   private var hasReading: Bool { BrightnessFormatting.showsUnit(for: value) }
@@ -57,7 +58,7 @@ struct BrightnessReadout: View {
           .foregroundColor(.secondary)
       }
     }
-    .contentTransition(.numericText())
+    .contentTransition(reduceMotion ? .identity : .numericText())
     .frame(width: Self.maxWidth, alignment: .trailing)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(BrightnessAccessibility.currentBrightnessLabel)

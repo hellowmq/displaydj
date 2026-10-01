@@ -1,6 +1,7 @@
 import ArgumentParser
 import DisplayDJCore
 import Foundation
+import VibeDisplayCore
 
 struct SetCommand: AsyncParsableCommand {
   static let configuration = CommandConfiguration(
@@ -52,10 +53,27 @@ struct SetBrightnessCommand: AsyncParsableCommand {
       )
     }
 
-    let result = try await AppleSiliconDDCBrightnessWriter().write(
-      percent: Double(value),
-      toStableID: displayID
-    )
+    let result: ControlWriteResult
+    do {
+      let controlLock = try await BrightnessCoordinator.shared.acquire()
+      defer { controlLock.release() }
+      // Resolve runtime selectors once to the identity used by every other entry point.
+      let topology = try await CoreGraphicsDisplayDiscovery().discoverDisplays()
+      let selector = try DisplayCLISelector.parse(displayID)
+      let targets = try DisplaySelectorResolver().resolve(selector, among: topology)
+      guard let target = targets.first, !target.isBuiltIn, !target.isMirrored,
+        target.isVirtual != true, let stableID = target.stableID else {
+        throw DisplayDJError(code: .unsupported, message: "Display has no safe external brightness target.")
+      }
+      try BrightnessCoordinator.shared.takeManualControl(stableID: stableID)
+      result = try await AppleSiliconDDCBrightnessWriter().write(
+        percent: Double(value), toStableID: stableID
+      )
+    } catch let error as VibeError {
+      throw DisplayDJError(code: error.code == .sessionConflict ? .busy : .conflict,
+        message: error.message, operation: .write, displayID: displayID,
+        details: ["phase": "brightness-ownership"])
+    }
 
     if json {
       FileHandle.standardOutput.write(try SetBrightnessOutput.jsonData(for: result))

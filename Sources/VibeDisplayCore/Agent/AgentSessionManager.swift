@@ -15,8 +15,8 @@ import Foundation
 /// staring at a broken screen:
 ///
 /// 1. **Snapshot before mutate.** The first session to touch a display records
-///    its brightness; nested sessions never re-snapshot, so the value restored
-///    at the end is always the human's original.
+///    its brightness; overlapping sessions share the recovery point. A manual write revokes
+///    existing claims; only the last still-owning session can restore it.
 /// 2. **Every session is reaped.** A session with no heartbeat past its TTL is
 ///    force-ended by `reap()`, exactly as if the agent had called `end`.
 public final class AgentSessionManager {
@@ -26,6 +26,7 @@ public final class AgentSessionManager {
     private let brightness: BrightnessService
     private let keepAwake: KeepAwakeRegistry
     private let store: StateStore
+    private let lifecycle: BrightnessCoordinator
     private var config: VibeConfig
 
     public init(brightness: BrightnessService = .shared,
@@ -35,12 +36,8 @@ public final class AgentSessionManager {
         self.brightness = brightness
         self.keepAwake = keepAwake
         self.store = store
+        self.lifecycle = BrightnessCoordinator(store: store, lockURL: store.brightnessLockURL.appendingPathExtension("sessions"))
         self.config = config
-        // Re-seed snapshots recorded by a previous process so `restore` still
-        // works after a daemon restart.
-        let persisted = store.load()
-        brightness.seedSnapshots(persisted.brightnessSnapshots,
-                                 transports: persisted.brightnessSnapshotTransports ?? [:])
     }
 
     public func updateConfig(_ config: VibeConfig) {
@@ -56,12 +53,14 @@ public final class AgentSessionManager {
     // MARK: - Queries
 
     public func sessions(includeEnded: Bool = false) -> [AgentSession] {
-        store.load().sessions
+        store.reload()
+        return store.load().sessions
             .filter { includeEnded || $0.isActive }
             .sorted { $0.createdAt < $1.createdAt }
     }
 
     public func session(_ id: String) throws -> AgentSession {
+        store.reload()
         guard let s = store.load().sessions.first(where: { $0.id == id }) else {
             throw VibeError(.sessionNotFound, "no session '\(id)'",
                             hint: "run `display-cli agent list`")
@@ -77,39 +76,33 @@ public final class AgentSessionManager {
                       ttlSeconds: Int? = nil,
                       metadata: [String: String] = [:],
                       initialPhase: AgentPhase = .starting) throws -> PhaseApplyReport {
+        try lifecycle.transaction {
+            try beginCoordinated(label: label, client: client, selector: selector, ttlSeconds: ttlSeconds,
+                                 metadata: metadata, initialPhase: initialPhase)
+        }
+    }
+
+    private func beginCoordinated(label: String, client: String, selector: String?, ttlSeconds: Int?,
+                                  metadata: [String: String], initialPhase: AgentPhase) throws -> PhaseApplyReport {
         let cfg = currentConfig()
         let resolvedSelector = selector ?? cfg.defaultSelector
         let ttl = ttlSeconds ?? cfg.daemon.sessionReaperTTLSeconds
         let now = Date()
 
-        // Snapshot BEFORE anything is mutated (invariant 1).
-        let taken = try brightness.snapshot(DisplaySelector(resolvedSelector))
-        let transports = brightness.snapshotTransportValues()
-
-        var session = AgentSession(
-            id: "as_" + UUID().uuidString.prefix(10).lowercased(),
-            label: label,
-            client: client,
-            phase: .idle,
-            selector: resolvedSelector,
-            createdAt: now,
-            updatedAt: now,
-            expiresAt: now.addingTimeInterval(TimeInterval(ttl)),
-            snapshot: taken,
-            metadata: metadata
-        )
-
-        try store.mutateChecked { state in
-            state.sessions.append(session)
-            for (k, v) in taken where state.brightnessSnapshots[k] == nil {
-                state.brightnessSnapshots[k] = v
-                if let transport = transports[k] {
-                    var saved = state.brightnessSnapshotTransports ?? [:]
-                    saved[k] = transport
-                    state.brightnessSnapshotTransports = saved
-                }
-            }
+        let id = "as_" + UUID().uuidString.prefix(10).lowercased()
+        let selectors = AgentPhase.allCases.compactMap { phase -> String? in
+            let profile = cfg.profile(for: phase)
+            return profile.brightness == nil ? nil : (profile.selector ?? resolvedSelector)
         }
+        let excluded = Set(cfg.displays.filter { $0.value.exclude == true }.keys.map { $0.lowercased() })
+        let captured = try brightness.captureAgentSnapshots(selectors.map(DisplaySelector.init), sessionID: id, excluding: excluded)
+        var session = AgentSession(
+            id: id, label: label, client: client, phase: initialPhase,
+            selector: resolvedSelector, createdAt: now, updatedAt: now,
+            expiresAt: now.addingTimeInterval(TimeInterval(ttl)), snapshot: captured.values,
+            brightnessRevisions: captured.revisions, metadata: metadata
+        )
+        try store.mutateChecked { $0.sessions.append(session) }
 
         Log.info("agent session begin", ["id": session.id, "client": client, "label": label])
         let report = try applyPhase(initialPhase, to: &session, note: "begin", ttlSeconds: ttl)
@@ -123,8 +116,15 @@ public final class AgentSessionManager {
                            to phase: AgentPhase,
                            note: String? = nil,
                            ttlSeconds: Int? = nil) throws -> PhaseApplyReport {
+        try lifecycle.transaction { try transitionCoordinated(id, to: phase, note: note, ttlSeconds: ttlSeconds) }
+    }
+
+    private func transitionCoordinated(_ id: String, to phase: AgentPhase, note: String?, ttlSeconds: Int?) throws -> PhaseApplyReport {
         var session = try self.session(id)
-        guard session.isActive || !phase.isTerminal else {
+        guard session.isActive else {
+            if !phase.isTerminal {
+                throw VibeError(.sessionConflict, "session already ended; begin a new session")
+            }
             // Ending an already-ended session is a no-op, not an error: agents
             // retry, and a retry must not blow up their pipeline.
             return PhaseApplyReport(session: session, brightness: [], keepAwake: [],
@@ -137,6 +137,10 @@ public final class AgentSessionManager {
 
     @discardableResult
     public func heartbeat(_ id: String, ttlSeconds: Int? = nil) throws -> AgentSession {
+        try lifecycle.transaction { try heartbeatCoordinated(id, ttlSeconds: ttlSeconds) }
+    }
+
+    private func heartbeatCoordinated(_ id: String, ttlSeconds: Int?) throws -> AgentSession {
         var session = try self.session(id)
         guard session.isActive else {
             // The docs contract (docs/API.md): `session_not_found` covers both
@@ -164,6 +168,10 @@ public final class AgentSessionManager {
                     outcome: AgentPhase = .succeeded,
                     note: String? = nil,
                     endedBy: String? = nil) throws -> PhaseApplyReport {
+        try lifecycle.transaction { try endCoordinated(id, outcome: outcome, note: note, endedBy: endedBy) }
+    }
+
+    private func endCoordinated(_ id: String, outcome: AgentPhase, note: String?, endedBy: String?) throws -> PhaseApplyReport {
         guard outcome.isTerminal else {
             throw VibeError(.invalidArgument, "'\(outcome.rawValue)' is not a terminal phase",
                             hint: "use succeeded, failed, or idle")
@@ -246,7 +254,17 @@ public final class AgentSessionManager {
             do {
                 let target = try BrightnessTarget.parse(expression)
                 let ramp = BrightnessRamp(durationMs: profile.rampMs ?? cfg.defaultRampMs)
-                brightnessResults = try applyRespectingOverrides(target, selector: selector, ramp: ramp, config: cfg)
+                let restoreClaims: Bool
+                if case .restoreSnapshot = target { restoreClaims = phase.isTerminal && profile.selector == nil }
+                else { restoreClaims = false }
+                brightnessResults = try applyRespectingOverrides(target, selector: restoreClaims ? .all : selector,
+                    ramp: ramp, config: cfg, restoringAllClaims: restoreClaims,
+                    origin: .agent(sessionID: session.id, revisions: session.brightnessRevisions ?? [:]))
+                for result in brightnessResults {
+                    if let reason = result.skippedReason {
+                        warnings.append("display \(result.slug): brightness skipped (\(reason))")
+                    }
+                }
                 for failure in brightnessResults where !failure.ok {
                     warnings.append("display \(failure.slug): \(failure.error ?? "write failed")")
                 }
@@ -319,10 +337,14 @@ public final class AgentSessionManager {
     private func applyRespectingOverrides(_ target: BrightnessTarget,
                                           selector: DisplaySelector,
                                           ramp: BrightnessRamp,
-                                          config: VibeConfig) throws -> [BrightnessApplyResult] {
-        let displays = try selector.resolve(in: brightness.inventory())
+                                          config: VibeConfig,
+                                          restoringAllClaims: Bool,
+                                          origin: BrightnessWriteOrigin) throws -> [BrightnessApplyResult] {
+        let displays = try selector.resolve(in: brightness.inventory(forceRefresh: true))
         var results: [BrightnessApplyResult] = []
         for display in displays {
+            if restoringAllClaims, case .agent(_, let revisions) = origin,
+               revisions[BrightnessCoordinator.key(display.uuid)] == nil { continue }
             let override = config.displays[display.slug] ?? config.displays[display.uuid]
             if override?.exclude == true { continue }
 
@@ -333,7 +355,7 @@ public final class AgentSessionManager {
                 if let hi = override?.maxBrightness { v = min(hi, v) }
                 effective = .absolute(v)
             }
-            results.append(brightness.apply(effective, to: display, ramp: ramp))
+            results.append(brightness.apply(effective, to: display, ramp: ramp, origin: origin))
         }
         return results
     }

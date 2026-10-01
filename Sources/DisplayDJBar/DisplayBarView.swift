@@ -4,6 +4,7 @@ import SwiftUI
 // MARK: - Main View
 
 struct DisplayBarView: View {
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @ObservedObject var controller: DisplayBarController
   /// Drives drag-to-reorder and alias editing. Off unless the user toggles it, so the
   /// cards behave as plain brightness controls the rest of the time. `EditMode` is iOS-
@@ -120,7 +121,7 @@ struct DisplayBarView: View {
 
       if controller.displays.count > 1 {
         Button {
-          withAnimation { isEditing.toggle() }
+          withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) { isEditing.toggle() }
         } label: {
           Image(
             systemName: isEditing
@@ -214,6 +215,7 @@ struct DisplayBarView: View {
 /// One display's brightness controls. Each card manages its own local
 /// slider state so dragging one never disturbs another.
 private struct DisplayCard: View {
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   let display: DisplayDescriptor
   @ObservedObject var controller: DisplayBarController
   /// Whether the popover is in reorder/alias-editing mode. Passed in (not read from the
@@ -406,7 +408,7 @@ private struct DisplayCard: View {
         occasion: occasion
       )
     else { return }
-    guard animated else {
+    guard animated && !reduceMotion else {
       sliderValue = value
       return
     }

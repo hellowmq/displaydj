@@ -6,6 +6,7 @@ import VibeDisplayCore
 /// substituted when native hardware control is unavailable.
 @MainActor
 struct DisplayBrightnessAccess {
+  var coordinator: BrightnessCoordinator = .shared
   var discovery: any DisplayDiscovering = CoreGraphicsDisplayDiscovery()
   var nativeBackend: any BrightnessBackend = DisplayServicesBackend()
   var readDDC: (String) async throws -> Double = { stableID in
@@ -35,12 +36,16 @@ struct DisplayBrightnessAccess {
 
   func write(percent: Double, stableID: String) async throws -> Int {
     let target = try DisplayControlValue(percent: percent)
+    let controlLock = try await coordinator.acquire()
+    defer { controlLock.release() }
     let display = try await resolve(stableID)
     guard display.isBuiltIn else {
+      try coordinator.takeManualControl(stableID: stableID)
       return Int(try await writeDDC(percent, stableID).rounded())
     }
     let info = nativeInfo(display)
     guard nativeBackend.supports(info) else { throw NativeBrightnessError.unavailable }
+    try coordinator.takeManualControl(stableID: stableID)
     guard nativeBackend.write(info, value: target.normalized) else {
       throw NativeBrightnessError.writeRejected
     }

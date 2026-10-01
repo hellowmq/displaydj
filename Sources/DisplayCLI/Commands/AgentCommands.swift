@@ -4,26 +4,26 @@ import VibeDisplayCore
 /// Abstracts "do I own the session locally, or does the daemon?" so every
 /// agent verb has exactly one implementation.
 protocol SessionDriver {
-    func begin(label: String, client: String, selector: String?, ttl: Int?, metadata: [String: String], phase: AgentPhase) throws -> AgentSession
-    func phase(_ id: String, _ phase: AgentPhase, note: String?) throws -> AgentSession
+    func begin(label: String, client: String, selector: String?, ttl: Int?, metadata: [String: String], phase: AgentPhase) throws -> PhaseApplyReport
+    func phase(_ id: String, _ phase: AgentPhase, note: String?) throws -> PhaseApplyReport
     func beat(_ id: String) throws -> AgentSession
-    func end(_ id: String, outcome: AgentPhase, note: String?) throws -> AgentSession
+    func end(_ id: String, outcome: AgentPhase, note: String?) throws -> PhaseApplyReport
     func list(all: Bool) throws -> [AgentSession]
 }
 
 struct LocalSessionDriver: SessionDriver {
     let manager = AgentSessionManager.shared
 
-    func begin(label: String, client: String, selector: String?, ttl: Int?, metadata: [String: String], phase: AgentPhase) throws -> AgentSession {
+    func begin(label: String, client: String, selector: String?, ttl: Int?, metadata: [String: String], phase: AgentPhase) throws -> PhaseApplyReport {
         try manager.begin(label: label, client: client, selector: selector,
-                          ttlSeconds: ttl, metadata: metadata, initialPhase: phase).session
+                          ttlSeconds: ttl, metadata: metadata, initialPhase: phase)
     }
-    func phase(_ id: String, _ phase: AgentPhase, note: String?) throws -> AgentSession {
-        try manager.transition(id, to: phase, note: note).session
+    func phase(_ id: String, _ phase: AgentPhase, note: String?) throws -> PhaseApplyReport {
+        try manager.transition(id, to: phase, note: note)
     }
     func beat(_ id: String) throws -> AgentSession { try manager.heartbeat(id) }
-    func end(_ id: String, outcome: AgentPhase, note: String?) throws -> AgentSession {
-        try manager.end(id, outcome: outcome, note: note).session
+    func end(_ id: String, outcome: AgentPhase, note: String?) throws -> PhaseApplyReport {
+        try manager.end(id, outcome: outcome, note: note)
     }
     func list(all: Bool) throws -> [AgentSession] { manager.sessions(includeEnded: all) }
 }
@@ -33,27 +33,27 @@ struct RemoteSessionDriver: SessionDriver {
 
     private struct ReportEnvelope: Codable { let session: AgentSession }
 
-    func begin(label: String, client clientName: String, selector: String?, ttl: Int?, metadata: [String: String], phase: AgentPhase) throws -> AgentSession {
+    func begin(label: String, client clientName: String, selector: String?, ttl: Int?, metadata: [String: String], phase: AgentPhase) throws -> PhaseApplyReport {
         var body: [String: Any] = ["label": label, "client": clientName, "phase": phase.rawValue]
         if let selector { body["selector"] = selector }
         if let ttl { body["ttlSeconds"] = ttl }
         if !metadata.isEmpty { body["metadata"] = metadata }
-        return try client.decode(ReportEnvelope.self, "POST", "/v1/agent/sessions", body: body).session
+        return try client.decode(PhaseApplyReport.self, "POST", "/v1/agent/sessions", body: body)
     }
-    func phase(_ id: String, _ phase: AgentPhase, note: String?) throws -> AgentSession {
+    func phase(_ id: String, _ phase: AgentPhase, note: String?) throws -> PhaseApplyReport {
         var body: [String: Any] = ["phase": phase.rawValue]
         if let note { body["note"] = note }
-        return try client.decode(ReportEnvelope.self, "POST", "/v1/agent/sessions/\(id)/phase", body: body).session
+        return try client.decode(PhaseApplyReport.self, "POST", "/v1/agent/sessions/\(id)/phase", body: body)
     }
     func beat(_ id: String) throws -> AgentSession {
         try client.decode(ReportEnvelope.self, "POST", "/v1/agent/sessions/\(id)/heartbeat").session
     }
-    func end(_ id: String, outcome: AgentPhase, note: String?) throws -> AgentSession {
+    func end(_ id: String, outcome: AgentPhase, note: String?) throws -> PhaseApplyReport {
         var path = "/v1/agent/sessions/\(id)?outcome=\(outcome.rawValue)"
         if let note, let encoded = note.addingPercentEncoding(withAllowedCharacters: .alphanumerics) {
             path += "&note=\(encoded)"
         }
-        return try client.decode(ReportEnvelope.self, "DELETE", path).session
+        return try client.decode(PhaseApplyReport.self, "DELETE", path)
     }
     func list(all: Bool) throws -> [AgentSession] {
         struct P: Codable { let sessions: [AgentSession] }
@@ -110,13 +110,15 @@ enum AgentCommands {
                         "         start one with `display-cli serve --detach`, or use `display-cli agent run -- <command>`")
         }
 
-        let session = try driver().begin(label: label,
+        let report = try driver().begin(label: label,
                                          client: detectClient(args),
                                          selector: args.string("selector", "display", "d"),
                                          ttl: args.int("ttl"),
                                          metadata: args.metadata(),
                                          phase: phase)
-        Output.emit(SessionEnvelope(session: session)) {
+        let session = report.session
+        report.warnings.forEach { Output.note($0) }
+        Output.emit(report) {
             // Printed bare so shells can do: SID=$(display-cli agent begin ...)
             session.id
         }
@@ -130,8 +132,9 @@ enum AgentCommands {
                             hint: "display-cli agent phase <id> running")
         }
         let rawPhase = args.string("phase") ?? args.positional(3) ?? "running"
-        let session = try driver().phase(id, try AgentPhase.parse(rawPhase), note: args.string("note"))
-        Output.emit(SessionEnvelope(session: session)) { "\(session.id) -> \(session.phase.rawValue)" }
+        let report = try driver().phase(id, try AgentPhase.parse(rawPhase), note: args.string("note"))
+        report.warnings.forEach { Output.note($0) }
+        Output.emit(report) { "\(report.session.id) -> \(report.session.phase.rawValue)" }
     }
 
     private static func beat(_ args: Arguments) throws {
@@ -149,7 +152,9 @@ enum AgentCommands {
         if args.has("all") {
             let active = try d.list(all: false)
             for session in active {
-                _ = try? d.end(session.id, outcome: .idle, note: "end --all")
+                if let report = try? d.end(session.id, outcome: .idle, note: "end --all") {
+                    report.warnings.forEach { Output.note($0) }
+                }
             }
             Output.emit(SessionsEnvelope(sessions: [])) { "ended \(active.count) session(s)" }
             return
@@ -158,8 +163,9 @@ enum AgentCommands {
             throw VibeError(.invalidArgument, "missing session id", hint: "display-cli agent end <id> | --all")
         }
         let outcome = try AgentPhase.parse(args.string("outcome") ?? "succeeded")
-        let session = try d.end(id, outcome: outcome, note: args.string("note"))
-        Output.emit(SessionEnvelope(session: session)) { "\(session.id) ended (\(session.phase.rawValue))" }
+        let report = try d.end(id, outcome: outcome, note: args.string("note"))
+        report.warnings.forEach { Output.note($0) }
+        Output.emit(report) { "\(report.session.id) ended (\(report.session.phase.rawValue))" }
     }
 
     private static func list(_ args: Arguments) throws {
@@ -191,12 +197,14 @@ enum AgentCommands {
         let beatInterval = max(5, args.int("beat") ?? 30)
         let d = driver()
 
-        let session = try d.begin(label: label,
+        let begun = try d.begin(label: label,
                                   client: detectClient(args),
                                   selector: args.string("selector", "display", "d"),
                                   ttl: args.int("ttl") ?? (beatInterval * 4),
                                   metadata: args.metadata(),
                                   phase: .starting)
+        let session = begun.session
+        begun.warnings.forEach { Output.note($0) }
         Output.note("display-cli session \(session.id) — \(label)")
 
         var finished = false
@@ -206,7 +214,9 @@ enum AgentCommands {
             if finished { finishLock.unlock(); return }
             finished = true
             finishLock.unlock()
-            _ = try? d.end(session.id, outcome: outcome, note: note)
+            if let report = try? d.end(session.id, outcome: outcome, note: note) {
+                report.warnings.forEach { Output.note($0) }
+            }
         }
 
         // Heartbeat timer: keeps both the session and its leases alive while
@@ -227,7 +237,9 @@ enum AgentCommands {
         }
         defer { sources.forEach { $0.cancel() } }
 
-        _ = try? d.phase(session.id, .running, note: "child started")
+        if let report = try? d.phase(session.id, .running, note: "child started") {
+            report.warnings.forEach { Output.note($0) }
+        }
 
         let status: Int32
         do {

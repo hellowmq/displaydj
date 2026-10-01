@@ -145,6 +145,12 @@ struct DisplayToolsView: View {
     @State private var modeAlertTimeoutTask: Task<Void, Never>?
 
     private var display: DisplayModeReport? { displays.first { $0.displayUUID == selectedDisplay } }
+    private var selectedPanelSupportsDDCControls: Bool {
+        guard let panel = controller.displays.first(where: {
+            $0.stableID?.caseInsensitiveCompare("uuid:\(selectedDisplay)") == .orderedSame
+        }) else { return false }
+        return !panel.isBuiltIn && !panel.isMirrored && panel.isVirtual != true && panel.stableID != nil
+    }
     private var selector: String { "uuid:\(selectedDisplay)" }
     private var softwareDimmingValue: Double? { softwareDimmingLevels.value(for: selectedDisplay) }
     private var softwareDimmingBinding: Binding<Double> {
@@ -245,24 +251,27 @@ struct DisplayToolsView: View {
                                     }
                                 }
                             }
-                            ToolsSection("显示器音量与对比度") {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    HStack {
-                                        Text("通过 DDC 分别检测控制项；有些显示器支持亮度、对比度，但不提供音量调节。")
-                                            .font(.callout).foregroundStyle(.secondary)
-                                        Spacer()
-                                        Button("读取控制项") { perform { try await loadControls() } }
-                                    }
-                                    ForEach(controls, id: \.control) { result in
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            HStack {
-                                                Text(result.control == .volume ? "音量" : "对比度")
-                                                Spacer()
-                                                Text(result.value.map { "\(Int(($0 * 100).rounded()))%" } ?? "不可读取")
-                                                Button("−5%") { adjust(result.control, "-5%") }.disabled(!result.ok)
-                                                Button("+5%") { adjust(result.control, "+5%") }.disabled(!result.ok)
+                            if selectedPanelSupportsDDCControls {
+                                ToolsSection("显示器音量与对比度") {
+                                    VStack(alignment: .leading, spacing: 12) {
+                                        HStack {
+                                            Text("逐项读取显示器的 DDC/CI 支持；不支持的控制项会保持禁用。")
+                                                .font(.callout).foregroundStyle(.secondary)
+                                            Spacer()
+                                            Button("读取控制项") { perform { try await loadControls() } }
+                                        }
+                                        ForEach(controls, id: \.control) { result in
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                HStack {
+                                                    Text(result.control == .volume ? "音量" : "对比度")
+                                                    Spacer()
+                                                    Text(result.value.map { "\(Int(($0 * 100).rounded()))%" }
+                                                        ?? (result.errorCode == "unsupported" ? "不支持" : "不可读取"))
+                                                    Button("−5%") { adjust(result.control, "-5%") }.disabled(!result.ok)
+                                                    Button("+5%") { adjust(result.control, "+5%") }.disabled(!result.ok)
+                                                }
+                                                if let error = result.error { Text(error).font(.callout).foregroundStyle(.secondary).textSelection(.enabled) }
                                             }
-                                            if let error = result.error { Text(error).font(.callout).foregroundStyle(.secondary).textSelection(.enabled) }
                                         }
                                     }
                                 }

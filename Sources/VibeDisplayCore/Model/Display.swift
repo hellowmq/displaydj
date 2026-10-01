@@ -119,6 +119,8 @@ public struct BrightnessApplyResult: Codable, Equatable, Sendable {
     /// True when this write was the first mutation of the display and the
     /// pre-existing value was recorded as the restore point (see docs/API.md).
     public let snapshotTaken: Bool
+    /// No write was sent; ok=true means the ownership policy was honored.
+    public let skippedReason: String?
     public let error: String?
 
     public init(displayUUID: String,
@@ -129,6 +131,7 @@ public struct BrightnessApplyResult: Codable, Equatable, Sendable {
                 transport: BrightnessTransport,
                 ok: Bool,
                 snapshotTaken: Bool = false,
+                skippedReason: String? = nil,
                 error: String? = nil) {
         self.displayUUID = displayUUID
         self.slug = slug
@@ -138,6 +141,7 @@ public struct BrightnessApplyResult: Codable, Equatable, Sendable {
         self.transport = transport
         self.ok = ok
         self.snapshotTaken = snapshotTaken
+        self.skippedReason = skippedReason
         self.error = error
     }
 
@@ -153,6 +157,7 @@ public struct BrightnessApplyResult: Codable, Equatable, Sendable {
         transport = try c.decode(BrightnessTransport.self, forKey: .transport)
         ok = try c.decode(Bool.self, forKey: .ok)
         snapshotTaken = try c.decodeIfPresent(Bool.self, forKey: .snapshotTaken) ?? false
+        skippedReason = try c.decodeIfPresent(String.self, forKey: .skippedReason)
         error = try c.decodeIfPresent(String.self, forKey: .error)
     }
 }

@@ -23,7 +23,10 @@ public final class DisplayRegistry {
     /// during a burst of agent calls without going stale across replugs.
     private let ttl: TimeInterval = 2.0
 
-    public init() {}
+    private let loadDisplays: () -> [DisplayInfo]
+
+    public init() { loadDisplays = Self.enumerate }
+    init(loadDisplays: @escaping () -> [DisplayInfo]) { self.loadDisplays = loadDisplays }
 
     /// Online displays, cached for `ttl` seconds.
     public func displays(forceRefresh: Bool = false) -> [DisplayInfo] {
@@ -31,7 +34,7 @@ public final class DisplayRegistry {
         if !forceRefresh, Date().timeIntervalSince(cachedAt) < ttl, !cached.isEmpty {
             return cached
         }
-        cached = Self.enumerate()
+        cached = loadDisplays()
         cachedAt = Date()
         return cached
     }

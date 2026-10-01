@@ -130,7 +130,7 @@ extension DisplayBarController {
     // Skip a write that would change nothing. Whether the display happens to be *selected*
     // has no bearing on whether its brightness already equals the target, so it is not part
     // of the test — including it made every unselected card re-send a value it already had.
-    if intent.value == brightnessByID[intent.displayStableID] { return }
+    // Even selecting the current value takes manual control from automation.
 
     do {
       let verified = try await brightnessAccess.write(

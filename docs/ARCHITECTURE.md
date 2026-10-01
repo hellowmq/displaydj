@@ -28,7 +28,13 @@ DDC 公共读写入口获得 `HardwareProcessLock`，覆盖整个读或写事务
 
 ## 恢复与并发限制
 
-恢复成功才删除快照，离线或失败显示器保留恢复点。SIGKILL、断电、损坏的状态文件和硬件失联都不能保证即时恢复。App 手动亮度修改不加入 Agent 快照所有权；DDC 锁保证传输事务不重叠，不保证产品层“最后的人类意图优先”。多个 CLI 的状态文件写入仍不构成跨进程数据库事务，自动化应集中通过一个 daemon。
+当前源码的 `BrightnessCoordinator` 在 DDC 传输锁之上使用状态目录中的 `state.json.brightness-lock`，覆盖亮度写入、独立回读和恢复决策。菜单栏和兼容 CLI 仍可直接调用硬件内核，在同一个协调锁下先持久化手动接管；主 CLI、HTTP、预设和 Agent 复用相同规则，无需强制启动 daemon。进程退出释放锁，锁竞争最多等待五秒。统一锁是有界的串行控制，不承诺跨屏原子事务。
+
+`PersistedState.brightnessRevisions` 以规范化 UUID 保存控制版本；`brightnessSnapshotOwnership` 把恢复点绑定到版本和首次捕获它的会话，手动撤销点的 sessionID 为 nil。Agent 会话的 `brightnessRevisions` 只在 begin 捕获。手动写入在触碰硬件前更新版本并退役旧 Agent 恢复点，已有会话不能在下一阶段重新取得权限。直接主 CLI/HTTP 写入可保留本轮手动撤销点，自动退出清理只恢复属于自动化的有效恢复点。恢复判断始终重读磁盘，不使用 daemon 缓存或旧进程内快照复活已被接管的状态。
+
+Agent 生命周期操作另用 `state.json.brightness-lock.sessions` 串行化，锁顺序为会话 → 亮度 → state 文件锁／DDC 锁。重叠会话在同一控制版本共享原始恢复点；还有活动会话时跳过恢复。预设将完整预检、逐屏写入和失败回退放在亮度协调锁内，避免回退覆盖途中插入的手动写入。写入获得锁后重新解析在线 UUID，原生屏使用新鲜 runtime ID。
+
+恢复成功才删除仍有效的快照，离线或失败恢复点保留。手动接管属于明确退役旧恢复点的动作。SIGKILL、断电、损坏文件和硬件失联不能保证即时恢复。旧快照缺少所有权时只允许显式恢复，旧会话缺少控制声明时不自动调光。新客户端拒绝与活着的旧版本服务并行写入；旧版 App/CLI 本身不认识此规则，应一并更新。同一状态目录之外、系统设置、实体按键及其他应用的变更不在接管检测范围内。
 
 Gamma 与 DisplayServices 不受 DDC 硬件锁覆盖。内建显示器已经通过 DisplayBrightnessAccess 接入菜单栏卡片；Gamma 尚未接入基础卡片。
 
@@ -42,6 +48,6 @@ Gamma 与 DisplayServices 不受 DDC 硬件锁覆盖。内建显示器已经通�
 
 `DisplayModeService` 使用 CoreGraphics 的 session 配置事务；每次重读目标与候选，设置后确认身份和模式，失败尝试恢复。模式操作与多个独立进程之间尚无统一产品层仲裁，不应并行应用多个桌面配置。
 
-`DisplayProfileStore` 的独立文件锁覆盖完整读改写，和旧 Agent `StateStore` 的并发限制不同。`DisplayProfileService` 将全量预检与逐屏执行分开，执行和回退前重新解析 UUID/transport。基础亮度快照仍由旧服务管理，所有权与跨 transport 的通用恢复改造仍是后续工作。
+`DisplayProfileStore` 的独立文件锁覆盖完整读改写，和旧 Agent `StateStore` 的并发限制不同。`DisplayProfileService` 将全量预检与逐屏执行分开，执行和回退前重新解析 UUID/transport。当前源码已将预设写入和回退接入亮度所有权协调；1.0.0 发布时尚无该仲裁。
 
 `DisplayToolsView` 只负责交互，由它启动 App 内置主 CLI 子进程，沿用有 daemon 则路由 daemon 的策略。子进程在后台读取输出，不阻塞主线程，不以 shell 拼接参数。窗口由菜单栏控制器持有，关闭可再打开。原基础亮度卡片保留既有直接调用路径。

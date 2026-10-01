@@ -171,9 +171,9 @@ public final class DaemonService {
         server?.stop()
 
         // Order matters: end sessions (which restores per-session brightness),
-        // then force-restore anything left, then drop assertions.
+        // then restore remaining automation-owned points, then drop assertions.
         _ = sessions.endAll(outcome: .idle, endedBy: "daemon-shutdown")
-        _ = brightness.restoreAll(ramp: .instant)
+        _ = brightness.restoreAutomatic(ramp: .instant)
         brightness.gamma.releaseAll()
         keepAwake.releaseEverything()
         DaemonDescriptor.remove()

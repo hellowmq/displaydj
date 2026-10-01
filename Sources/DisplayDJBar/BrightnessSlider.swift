@@ -7,6 +7,7 @@ import SwiftUI
 /// keyboard focus and arrow keys itself. Without that it is a pile of decorative shapes
 /// to VoiceOver and unreachable to anyone not using a pointer.
 struct BrightnessSlider: View {
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Binding var value: Double
   let isEnabled: Bool
   /// Whether `value` reflects a brightness the hardware actually reported.
@@ -61,6 +62,12 @@ struct BrightnessSlider: View {
     SliderStep.resolve(isEnabled: isEnabled, currentValue: steppableValue)
   }
 
+  /// Direct manipulation follows the pointer without spring lag or overshoot.
+  /// Both the fill and thumb use this same transition for discrete changes.
+  private var valueAnimation: Animation? {
+    reduceMotion || isDragging ? nil : .easeOut(duration: 0.12)
+  }
+
   var body: some View {
     // One view, not a column. The `0%`/`100%` endpoints that sat under the bar were the last
     // thing this control drew besides the bar itself, and they were the reason the slider read
@@ -112,7 +119,7 @@ struct BrightnessSlider: View {
         Capsule()
           .fill(DisplayDJBrandColor.spectralCyan)
           .frame(width: trackFillWidth(in: geometry.size.width), height: Metrics.trackHeight)
-          .animation(.interactiveSpring(response: 0.15), value: trackState.fillRatio)
+          .animation(valueAnimation, value: trackState.fillRatio)
 
         thumb(in: geometry.size.width)
       }
@@ -162,6 +169,10 @@ struct BrightnessSlider: View {
     .onChange(of: value) { newValue in
       if !isDragging { dragValue = newValue }
     }
+    .onChange(of: isEnabled) { enabled in
+      if !enabled { isDragging = false }
+    }
+    .onDisappear { isDragging = false }
   }
 
   /// The thumb, drawn only when there is a position for it to claim.
@@ -192,7 +203,7 @@ struct BrightnessSlider: View {
         .frame(width: Metrics.thumbSize, height: Metrics.thumbSize)
         .offset(x: thumbOffset(in: width))
         .shadow(color: .black.opacity(isDragging ? 0.22 : 0.08), radius: isDragging ? 4 : 2)
-        .animation(.interactiveSpring(response: 0.15), value: trackState.fillRatio)
+        .animation(valueAnimation, value: trackState.fillRatio)
     }
   }
 

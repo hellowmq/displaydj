@@ -126,12 +126,23 @@ public final class DisplayProfileService {
     private let readValue: (DisplayInfo) -> Double?
     private let writeValue: (DisplayInfo, Double) -> BrightnessApplyResult
     private let allowsGamma: Bool
+    private var coordinator: BrightnessCoordinator?
 
     public convenience init(brightness: BrightnessService = .shared, store: DisplayProfileStore = .shared,
                             allowsGamma: Bool = false) {
         self.init(store: store, allowsGamma: allowsGamma,
                   inventory: { brightness.inventory(forceRefresh: true) }, read: { brightness.readOne($0) },
-                  write: { brightness.apply(.absolute($1), to: $0, expectedTransport: $0.capability.preferred) })
+                  write: { display, value in
+                    do {
+                        return try brightness.applyCoordinated(.absolute(value), to: display,
+                            ramp: .instant, expectedTransport: display.capability.preferred, origin: .manual)
+                    } catch {
+                        return BrightnessApplyResult(displayUUID: display.uuid, slug: display.slug,
+                            requested: value, applied: nil, transport: display.capability.preferred,
+                            ok: false, error: "brightness control refused: \(error)")
+                    }
+                  })
+        coordinator = brightness.coordinator
     }
 
     init(store: DisplayProfileStore, allowsGamma: Bool = false, inventory: @escaping () -> [DisplayInfo],
@@ -170,6 +181,13 @@ public final class DisplayProfileService {
     /// Preflight the whole profile before writing any display. Runtime failures
     /// trigger best-effort reverse-order rollback to this invocation's baseline.
     public func apply(_ name: String, dryRun: Bool = false) throws -> ProfileApplyReport {
+        if let coordinator {
+            return try coordinator.transaction { try applyProfile(name, dryRun: dryRun) }
+        }
+        return try applyProfile(name, dryRun: dryRun)
+    }
+
+    private func applyProfile(_ name: String, dryRun: Bool) throws -> ProfileApplyReport {
         let profile = try store.get(name)
         let current = inventory()
         var targets: [DisplayInfo] = []

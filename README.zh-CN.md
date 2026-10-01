@@ -10,9 +10,9 @@
 
 [![macOS checks](https://github.com/hellowmq/displaydj/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/hellowmq/displaydj/actions/workflows/ci.yml)
 
-`v1.0.0` · `macOS 13+ target` · `Swift 6` · `Apple Silicon DDC/CI` · `MIT`
+`macOS 13+ target` · `Swift 6` · `Apple Silicon DDC/CI` · `MIT`
 
-[下载 v1.0.0](https://github.com/hellowmq/displaydj/releases/tag/v1.0.0) · [快速开始](#快速开始) · [CLI / HTTP 参考](docs/API.md)
+[下载最新版本](https://github.com/hellowmq/displaydj/releases/latest) · [快速开始](#快速开始) · [CLI / HTTP 参考](docs/API.md)
 
 </div>
 
@@ -43,17 +43,83 @@ DisplayDJ 把“连接状态”也变成显示器控制的一部分，而不只�
 
 另保留 `displaydj` 兼容命令，原有 `get brightness` / `set brightness` 脚本可以继续使用。它保留旧 JSON schema 与退出码，不与新 CLI 的契约混用。
 
+## 快速开始
+
+### 下载 App
+
+从 [最新发布](https://github.com/hellowmq/displaydj/releases/latest) 下载 arm64 ZIP 或 DMG。安装包同时包含 `DisplayDJ.app`、独立的 `display-cli` 和兼容旧脚本的 `displaydj` 命令。
+
+当前下载包仅支持 Apple Silicon，采用 ad-hoc 签名，尚未经过 Developer ID 签名和 Apple 公证，因此 macOS 可能阻止首次启动。可在 Finder 中按住 Control 点击 DisplayDJ 并选择“打开”，或前往“系统设置 → 隐私与安全性”允许打开。全局快捷键还需要辅助功能权限；若授权后没有立即生效，请退出并重新打开 DisplayDJ。完整安装说明与兼容边界见[发布说明](docs/RELEASE-NOTES-1.0.1.md)。
+
+### 安装命令行工具
+
+ZIP 和 DMG 中的 CLI 位于 App 包内，不会自动安装到 PATH。将 `DisplayDJ.app` 放入 `/Applications` 后，可直接运行：
+
+```bash
+/Applications/DisplayDJ.app/Contents/MacOS/display-cli doctor --json
+```
+
+若希望在任意目录输入 `display-cli`，把包内 CLI 复制到用户目录（无需启动 App）：
+
+```bash
+mkdir -p "$HOME/.local/bin"
+cp /Applications/DisplayDJ.app/Contents/MacOS/display-cli "$HOME/.local/bin/display-cli"
+export PATH="$HOME/.local/bin:$PATH"
+display-cli version --json
+display-cli doctor --json
+```
+
+将 `export PATH="$HOME/.local/bin:$PATH"` 添加到 `~/.zshrc`，让新终端也能找到命令。更新 App 后再次复制即可更新 CLI；旧脚本需要 `displaydj` 时，同样复制 `Contents/MacOS/displaydj`。只使用 CLI 的用户也可从 ZIP 的 App 包内复制该文件，无需安装或打开菜单栏 App。首次执行仍受 macOS 下载安全检查约束。
+
+### CLI 日常使用
+
+以下命令使用已安装到 PATH 的 `display-cli`。将 `UUID` 和 `MODE_ID` 替换为查询结果中的实际值。
+
+```bash
+display-cli doctor --json
+display-cli displays --json
+
+# 从 displays 输出复制目标 UUID；亮度值是 0…1 或显式百分比
+display-cli brightness set 60% --display 'uuid:<UUID>'
+display-cli brightness set +5% --display 'uuid:<UUID>'
+display-cli brightness restore
+
+# 只在一个命令运行期间保持唤醒
+display-cli keepawake run -- make test
+
+# 把开始、运行、完成与恢复交给任务生命周期
+# 默认配置会改变显示器亮度，先检查 config show
+display-cli config show
+display-cli agent run --label 'test suite' -- make test
+```
+
+### 可选后台服务
+
+普通 CLI 操作不需要服务。HTTP 接入、命令退出后仍需保持的 Gamma 调光与租约、以及跨命令管理 Agent 会话时，再启动本地服务。设置窗口也有显式启动按钮；结束时可用 CLI 停止。只有明确需要登录后自动启动时才安装登录项。
+
+```bash
+display-cli serve --detach
+display-cli daemon status
+display-cli daemon stop
+
+# 可选：登录后自动启动；关闭自动启动请运行 daemon uninstall
+display-cli daemon install
+display-cli daemon uninstall
+```
+
+只有需要持续状态或 HTTP 接入时才运行后台服务；App 不会自动安装登录项或启动服务。若已通过 `daemon install` 安装登录项，`daemon stop` 后服务会重新启动；使用 `daemon uninstall` 关闭自动启动。模块关系与迁移说明见[架构文档](docs/ARCHITECTURE.md)。
+
 ## 从 App 或 CLI 主动断开显示器
 
 当操作可用且安全时，每张在线显示器卡片都提供断开按钮。由 DisplayDJ 断开的屏幕会保留在“已断开的显示器”区域，并提供“重新连接”入口。CLI 提供相同流程和适合脚本处理的结构化输出：
 
 ```bash
 # 先查找目标显示器的稳定 UUID
-.build/debug/display-cli displays --json
+display-cli displays --json
 
 # 让单台显示器退出 macOS 桌面，之后再重新连接
-.build/debug/display-cli disconnect --display uuid:<UUID>
-.build/debug/display-cli connect --display uuid:<UUID>
+display-cli disconnect --display 'uuid:<UUID>'
+display-cli connect --display 'uuid:<UUID>'
 ```
 
 断开操作一次只接受一个稳定目标。DisplayDJ 不会断开镜像屏或最后一块在线屏幕；如果拓扑核验失败，重连记录仍会保留，便于之后恢复目标显示器。
@@ -64,86 +130,26 @@ DisplayDJ 提供外屏对比度与音量、系统已有显示模式的选择，�
 
 ```bash
 # 单独使用 CLI，不需要先打开菜单栏 App
-.build/debug/display-cli volume get --display external --json
-.build/debug/display-cli contrast set 60% --display uuid:<UUID> --dry-run --json
-.build/debug/display-cli modes list --display main --json
-.build/debug/display-cli modes set <MODE_ID> --display uuid:<UUID> --dry-run --json
+display-cli volume get --display external --json
+display-cli contrast set 60% --display 'uuid:<UUID>' --dry-run --json
+display-cli modes list --display main --json
+display-cli modes set MODE_ID --display 'uuid:<UUID>' --dry-run --json
 
 # 保存当前亮度，预演后应用；Gamma 预设实际应用需要本地服务
-.build/debug/display-cli profile save work
-.build/debug/display-cli profile apply work --dry-run --json
-.build/debug/display-cli profile apply work
+display-cli profile save work
+display-cli profile apply work --dry-run --json
+display-cli profile apply work
 
-# 构建并打开本地 App 的显示设置窗口
-./script/build_and_run.sh --tools
+# 打开已安装 App 的显示设置窗口
+open -a DisplayDJ --args --display-tools
 ```
-
-## 快速开始
-
-### 下载 App
-
-从 [v1.0.0 Release](https://github.com/hellowmq/displaydj/releases/tag/v1.0.0) 下载 arm64 ZIP 或 DMG。安装包同时包含 `DisplayDJ.app`、独立的 `display-cli` 和兼容旧脚本的 `displaydj` 命令。
-
-当前下载包仅支持 Apple Silicon，采用 ad-hoc 签名，尚未经过 Developer ID 签名和 Apple 公证，因此 macOS 可能阻止首次启动。可在 Finder 中按住 Control 点击 DisplayDJ 并选择“打开”，或前往“系统设置 → 隐私与安全性”允许打开。全局快捷键还需要辅助功能权限；若授权后没有立即生效，请退出并重新打开 DisplayDJ。完整安装说明与兼容边界见[发布说明](docs/RELEASE-NOTES-1.0.0.md)。
-
-### 从源码构建
-
-需要 macOS 13+、Swift 6.0+ 工具链和 Python 3（仅打包与烟雾测试）。首次构建需要获取 Apple 的 `swift-argument-parser`；主 CLI、硬件内核和 HTTP 层本身不使用该依赖。
-
-#### 菜单栏 App
-
-```bash
-swift build
-bash scripts/build-app.sh
-open '.build/DisplayDJ.app'
-```
-
-App 的亮度卡片支持外接 DDC 与内建屏原生背光。设置窗口还提供逐屏 Gamma 软件调光：打开窗口或切屏时自动读取，松开滑块即应用；服务未运行时需由用户点击“启用软件调光”。快捷键可选择已选中的显示器或鼠标所在显示器，多屏硬件亮度同步默认关闭。App 不会自动安装登录项。
-
-#### 独立 CLI
-
-运行 `swift build --product display-cli` 后即可单独使用 CLI，无需打开 App 或启动后台服务；也可以将可执行文件放入自己的 PATH 目录。App 包内同样包含 `Contents/MacOS/display-cli` 和兼容命令 `displaydj`。
-
-```bash
-.build/debug/display-cli doctor --json
-.build/debug/display-cli displays --json
-
-# 从 displays 输出复制目标 UUID；亮度值是 0…1 或显式百分比
-.build/debug/display-cli brightness set 60% --display uuid:<UUID>
-.build/debug/display-cli brightness set +5% --display uuid:<UUID>
-.build/debug/display-cli brightness restore
-
-# 只在一个命令运行期间保持唤醒
-.build/debug/display-cli keepawake run -- make test
-
-# 把开始、运行、完成与恢复交给任务生命周期
-# 默认配置会改变显示器亮度，先检查 config show
-.build/debug/display-cli config show
-.build/debug/display-cli agent run --label 'test suite' -- make test
-```
-
-#### 可选后台服务
-
-普通 CLI 操作不需要服务。HTTP 接入、命令退出后仍需保持的 Gamma 调光与租约、以及跨命令管理 Agent 会话时，再启动本地服务。设置窗口也有显式启动按钮；结束时可用 CLI 停止。只有明确需要登录后自动启动时才安装登录项。
-
-```bash
-.build/debug/display-cli serve --detach
-.build/debug/display-cli daemon status
-.build/debug/display-cli daemon stop
-
-# 可选：登录后自动启动；关闭自动启动请运行 daemon uninstall
-.build/debug/display-cli daemon install
-.build/debug/display-cli daemon uninstall
-```
-
-只有需要持续状态或 HTTP 接入时才运行后台服务；App 不会自动安装登录项或启动服务。若已通过 `daemon install` 安装登录项，`daemon stop` 后服务会重新启动；使用 `daemon uninstall` 关闭自动启动。模块关系与迁移说明见[架构文档](docs/ARCHITECTURE.md)。
 
 ## 可以依赖什么
 
 - **身份匹配**：DDC 使用 DisplayDJ 的服务与显示器身份关联，不再按两份枚举列表的位置配对。旧 `ddcServiceIndex` 配置会被拒绝，避免误控另一块屏幕。
 - **写后验证**：DDC 写入前读取基线，写入后核验读回值；失败尝试恢复并报告结果，不用请求值冒充读回值。
 - **跨进程协调**：App、主 CLI、兼容 CLI 的 DDC 操作共用本机用户锁。进程退出自动释放；等待超时返回 busy，不强行争用硬件。
-- **恢复可重试**：成功恢复后才移除恢复点；断开的显示器或失败的恢复会保留快照。
+- **恢复可重试**：断开的显示器或失败的恢复会保留快照；1.0.1 在你手动接管屏幕时，也会退役该屏旧 Agent 的恢复点。
 - **本地接口**：HTTP 仅在 loopback 接口工作，默认要求令牌。配置与令牌默认在 `~/.displaydj/`。
 - **断开保护**：拒绝批量断开、镜像屏断开和最后一块在线显示器断开。
 
@@ -158,10 +164,33 @@ App 的亮度卡片支持外接 DDC 与内建屏原生背光。设置窗口还�
 | Intel 外屏 DDC | 未实现生产读写路径；可能使用软件 Gamma |
 | macOS 13/14 | 构建目标从 13 起；v1.0.0 只在本机 macOS 27 实测，尚无最低版本的安装与硬件验收 |
 | 显示器断开 / 重连 | 依赖私有 API；v1.0.0 在此前 Dell 当前连接上完成断开、重连与拓扑回读，其他设备尚无此证据 |
-| App 与 Agent 同时调光 | 硬件操作会串行，但 Agent 结束仍可能恢复之前的快照；没有“手动操作优先”的所有权仲裁 |
+| App 与 Agent 同时调光 | 1.0.1 支持逐屏手动亮度优先：已有 Agent 会话跳过该屏的后续调节与恢复。App、CLI 和服务须使用相同版本与状态目录；v1.0.0 无此行为 |
 | 分发 | arm64 ZIP、DMG 与 SHA-256；ad-hoc 签名且未公证，尚未验证双架构或 Developer ID 签名 |
 
 ## 开发与打包
+
+### 从源码构建
+
+需要 macOS 13+、Swift 6.0+ 工具链和 Python 3（仅打包与烟雾测试）。首次构建需要获取 Apple 的 `swift-argument-parser`；主 CLI、硬件内核和 HTTP 层本身不使用该依赖。
+
+#### 菜单栏 App
+
+```bash
+swift build
+bash scripts/build-app.sh
+open '.build/DisplayDJ.app'
+```
+
+#### 独立 CLI
+
+```bash
+swift build -c release --product display-cli
+bin_dir="$(swift build -c release --show-bin-path)"
+mkdir -p "$HOME/.local/bin"
+cp "$bin_dir/display-cli" "$HOME/.local/bin/display-cli"
+export PATH="$HOME/.local/bin:$PATH"
+display-cli version --json
+```
 
 GitHub Actions 在 `macos-15` 上对每次 push 和 pull request 执行与本地相同的核心检查：
 
@@ -183,7 +212,7 @@ bash scripts/package-dmg.sh
 - [架构与迁移](docs/ARCHITECTURE.md)
 - [来源与许可](docs/PROVENANCE.md)
 - [验证结果](docs/VALIDATION.md)
-- [1.0.0 发布说明](docs/RELEASE-NOTES-1.0.0.md)
+- [1.0.1 发布说明](docs/RELEASE-NOTES-1.0.1.md)
 - [1.0 验收清单](docs/RELEASE-1.0-CHECKLIST.md)
 - [设备分阶段验证](docs/DEVICE-VALIDATION.md)
 - [双屏界面验收步骤](docs/GUI-ACCEPTANCE-1.0.md)

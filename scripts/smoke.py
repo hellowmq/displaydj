@@ -9,9 +9,9 @@ with tempfile.TemporaryDirectory(prefix='display-cli-smoke-') as directory:
         result = subprocess.run([str(binary), *args, '--json'], env=env, capture_output=True, text=True, timeout=30)
         assert result.returncode == expected, (args, result.returncode, result.stderr, result.stdout)
         return json.loads(result.stdout)
-    assert cli('version')['data']['version'] == '1.0.0'
+    assert cli('version')['data']['version'] == '1.0.1'
     legacy = subprocess.run([str(binary.with_name('displaydj')), '--version'], capture_output=True, text=True, timeout=10)
-    assert legacy.returncode == 0 and legacy.stdout.strip() == '1.0.0'
+    assert legacy.returncode == 0 and legacy.stdout.strip() == '1.0.1'
     assert cli('help')['ok']
     assert not cli('disconnect', expected=2)['ok']
     assert not cli('unknown-command', expected=2)['ok']
@@ -55,6 +55,13 @@ with tempfile.TemporaryDirectory(prefix='display-cli-smoke-') as directory:
     assert not cli('profile', 'apply', 'offline-test', '--dry-run', expected=3)['ok']
     assert cli('profile', 'delete', 'offline-test')['data']['deleted'] == 'offline-test'
     print('PASS CLI contracts, strict arguments, display modes/dry-run and isolated profiles')
+    # Disable brightness and leases before testing the remote Agent driver.
+    (pathlib.Path(directory) / 'config.json').write_text(json.dumps({
+        'version': 1, 'defaultSelector': 'all', 'defaultRampMs': 0,
+        'daemon': {'host': '127.0.0.1', 'port': 7643, 'requireToken': True, 'sessionReaperTTLSeconds': 900},
+        'phases': {phase: {'keepAwake': []} for phase in ['idle', 'starting', 'running', 'waiting', 'succeeded', 'failed']},
+        'displays': {}
+    }))
     process = subprocess.Popen([str(binary), 'serve', '--port', '0'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     try:
         descriptor_path = pathlib.Path(directory) / 'daemon.json'
@@ -86,6 +93,11 @@ with tempfile.TemporaryDirectory(prefix='display-cli-smoke-') as directory:
         routes = request('/v1')['data']['routes']
         assert 'POST /v1/controls/:control' in routes and 'POST /v1/profiles/:name/apply' in routes
         assert cli('daemon', 'status')['ok']
+        started = cli('agent', 'begin', '--label', 'isolated report smoke')['data']
+        session_id = started['session']['id']
+        for report in [started, cli('agent', 'phase', session_id, 'waiting')['data'], cli('agent', 'end', session_id)['data']]:
+            assert report['brightness'] == [] and report['keepAwake'] == [] and report['warnings'] == []
+        assert request('/v1/health')['data']['activeSessions'] == 0
         # Upgraded clients must not send display requests to a stale daemon.
         mismatched = dict(descriptor, version='0.0.0')
         descriptor_path.write_text(json.dumps(mismatched))

@@ -1,5 +1,6 @@
 import DisplayDJCore
 import Foundation
+import VibeDisplayCore
 
 /// What the user can actually do after a failure.
 ///
@@ -139,6 +140,19 @@ enum BrightnessFailurePresenter {
   }
 
   static func failure(for error: Error, operation: BrightnessOperation) -> BrightnessFailure {
+    if let controlError = error as? VibeError {
+      let suggestion: String
+      switch controlError.code {
+      case .daemonUnavailable:
+        suggestion = "后台服务版本与 App 不同。请先结束自动化任务，用新版本 CLI 重启服务后重试。"
+      case .sessionConflict:
+        suggestion = "另一项亮度调节仍在进行，请稍后重试。"
+      default:
+        suggestion = "无法读取或保存亮度控制状态，未发送写入。请保留现有状态文件，检查状态目录后重试。"
+      }
+      return BrightnessFailure(summary: "\(operation.verb)暂未执行", suggestion: suggestion,
+        recovery: operation.retry, technicalDetail: controlError.description)
+    }
     if let nativeError = error as? NativeBrightnessError {
       return nativeFailure(for: nativeError, operation: operation)
     }

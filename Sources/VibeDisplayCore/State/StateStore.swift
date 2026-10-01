@@ -11,6 +11,9 @@ public struct PersistedState: Codable, Equatable {
     public var brightnessSnapshots: [String: Double]
     /// Optional for state files written before transport tracking was added.
     public var brightnessSnapshotTransports: [String: BrightnessTransport]?
+    /// Optional for v1 state files. Revisions are keyed by canonical UUID.
+    public var brightnessRevisions: [String: String]?
+    public var brightnessSnapshotOwnership: [String: BrightnessSnapshotOwnership]?
     public var updatedAt: Date
 
     public init(version: Int = 1,
@@ -34,6 +37,8 @@ public final class StateStore {
     public static let shared = StateStore()
 
     private let url: URL
+    var brightnessLockURL: URL { url.appendingPathExtension("brightness-lock") }
+    var daemonURL: URL { url.deletingLastPathComponent().appendingPathComponent("daemon.json") }
     private let lock = NSLock()
     private var cache: PersistedState?
 
@@ -107,6 +112,18 @@ public final class StateStore {
         cache = nil
         lock.unlock()
         _ = load()
+    }
+
+    /// Authoritative reads for ownership decisions; corrupt files cannot grant control.
+    func readChecked() throws -> PersistedState {
+        lock.lock(); defer { lock.unlock() }
+        let state: PersistedState
+        if FileManager.default.fileExists(atPath: url.path) {
+            do { state = try JSONCoding.decoder.decode(PersistedState.self, from: Data(contentsOf: url)) }
+            catch { throw VibeError(.configInvalid, "cannot read brightness ownership; state file preserved") }
+        } else { state = PersistedState() }
+        cache = state
+        return state
     }
 
     public func reset() {

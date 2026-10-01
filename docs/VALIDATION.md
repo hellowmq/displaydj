@@ -1,5 +1,11 @@
 # 验收记录
 
+## 2026-10-02：1.0.1 发布验收
+
+本轮源码加入逐屏控制权、跨进程协调及 CLI 跳过原因；`swift test` 通过 **651 项**。内建屏真实写入与独立回读验证手动接管、会话结束、daemon 退出和显式恢复，结束时回到原始亮度。外屏 DDC 和本轮 GUI 人工操作未验收。行为及完整边界见 [MANUAL-BRIGHTNESS-PRIORITY.md](MANUAL-BRIGHTNESS-PRIORITY.md)。
+
+最终源码再次通过完整测试和隔离烟雾测试，release App 构建及严格签名校验通过。本轮还加入 DDC 控件可用性显示和系统减少动态效果支持；UI 人工操作尚未验收。发布范围为 arm64、ad-hoc 签名、未公证，详见 [1.0.1 发布说明](RELEASE-NOTES-1.0.1.md)。
+
 ## 2026-09-28：v1.0.0 发布验收
 
 本节对应 `v1.0.0` 源码、由该版本构建的 GitHub Release，以及开发机上的最终安装验收。本机为 arm64、macOS 27.0；最低 macOS 13 的目标和 Intel 未做安装或硬件验收。发布包采用 ad-hoc 签名且未公证，不声称可无提示安装。真实设备详情及私有日志索引见 [DEVICE-VALIDATION.md](DEVICE-VALIDATION.md)，发版门槛见 [RELEASE-1.0-CHECKLIST.md](RELEASE-1.0-CHECKLIST.md)。

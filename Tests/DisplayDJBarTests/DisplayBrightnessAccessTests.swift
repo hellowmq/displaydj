@@ -1,6 +1,7 @@
+import Foundation
 import DisplayDJCore
 import Testing
-import VibeDisplayCore
+@testable import VibeDisplayCore
 
 @testable import DisplayDJBar
 
@@ -112,10 +113,37 @@ struct DisplayBrightnessAccessTests {
 
   private func access(_ backend: NativeBackendStub,
                       displays: [DisplayDescriptor] = [panel(true), panel(false)]) -> DisplayBrightnessAccess {
-    DisplayBrightnessAccess(discovery: BrightnessDiscovery(displays: displays),
+    DisplayBrightnessAccess(coordinator: BrightnessCoordinator(store: StateStore(url:
+      FileManager.default.temporaryDirectory.appendingPathComponent("displaydj-bar-\(UUID().uuidString)/state.json"))),
+      discovery: BrightnessDiscovery(displays: displays),
       nativeBackend: backend,
       readDDC: { _ in Issue.record("Unexpected DDC read"); return 0 },
       writeDDC: { _, _ in Issue.record("Unexpected DDC write"); return 0 })
+  }
+
+  @Test func selectingTheCurrentValueStillTakesManualControlFromAnAgent() async throws {
+    let backend = NativeBackendStub()
+    let controller = DisplayBarController()
+    controller.displayDiscovery = BrightnessDiscovery(displays: [panel(true)])
+    let stateURL = FileManager.default.temporaryDirectory.appendingPathComponent("displaydj-manual-\(UUID().uuidString)/state.json")
+    let store = StateStore(url: stateURL)
+    let uuid = String(internalID.dropFirst(5)).uppercased()
+    let key = uuid.lowercased()
+    store.mutate {
+      $0.brightnessSnapshots[uuid] = 0.6
+      $0.brightnessSnapshotTransports = [uuid: .displayServices]
+      $0.brightnessRevisions = [key: "agent-revision"]
+      $0.brightnessSnapshotOwnership = [uuid: .init(revision: "agent-revision", sessionID: "agent")]
+    }
+    var router = access(backend, displays: [panel(true)])
+    router.coordinator = BrightnessCoordinator(store: store)
+    controller.brightnessAccess = router
+    await controller.scanAndRefresh()
+    await controller.refreshDisplay(stableID: internalID, trigger: .userRequest)
+    await controller.setBrightness(43, for: internalID)
+    #expect(store.load().brightnessSnapshots[uuid] == nil)
+    #expect(store.load().brightnessRevisions?[key] != "agent-revision")
+    #expect(controller.brightnessByID[internalID] == 43)
   }
 
   @Test func builtInUsesNativeAndFreshRuntimeID() async throws {
@@ -174,6 +202,16 @@ struct DisplayBrightnessAccessTests {
     await #expect(throws: DisplayDJError.self) { try await router.write(percent: 101, stableID: internalID) }
     await #expect(throws: DisplayDJError.self) { try await router.write(percent: 50, stableID: internalID) }
     #expect(backend.writes.isEmpty)
+  }
+
+  @Test func ownershipFailuresDescribeTheServiceOrStateAndKeepTheTarget() {
+    for code in [VibeError.Code.daemonUnavailable, .sessionConflict, .configInvalid, .ioFailure] {
+      let failure = BrightnessFailurePresenter.failure(for: VibeError(code, "detail"),
+        operation: .write(value: 60, displayStableID: internalID))
+      #expect(failure.recovery == .retryWrite(value: 60, displayStableID: internalID))
+      #expect(!failure.suggestion.contains("线缆"))
+      #expect(!failure.suggestion.contains("DDC"))
+    }
   }
 
   @Test func nativeFailureRecoveryNamesItsOwnCard() {
