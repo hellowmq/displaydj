@@ -10,9 +10,9 @@ A macOS menu bar app and standalone CLI for hands-on display control and automat
 
 [![macOS checks](https://github.com/hellowmq/displaydj/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/hellowmq/displaydj/actions/workflows/ci.yml)
 
-`v1.0.0` · `macOS 13+ target` · `Swift 6` · `Apple Silicon DDC/CI` · `MIT`
+`macOS 13+ target` · `Swift 6` · `Apple Silicon DDC/CI` · `MIT`
 
-[Download v1.0.0](https://github.com/hellowmq/displaydj/releases/tag/v1.0.0) · [Quick start](#quick-start) · [CLI / HTTP reference](docs/API.md)
+[Download latest release](https://github.com/hellowmq/displaydj/releases/latest) · [Quick start](#quick-start) · [CLI / HTTP reference](docs/API.md)
 
 </div>
 
@@ -43,17 +43,83 @@ Connection switching uses private macOS APIs and is hardware/system dependent. D
 
 The `displaydj` compatibility command is also retained, so existing `get brightness` and `set brightness` scripts continue to work. It preserves the legacy JSON schema and exit codes rather than mixing them with the new CLI contract.
 
+## Quick start
+
+### Download the app
+
+Download the arm64 ZIP or DMG from the [latest release](https://github.com/hellowmq/displaydj/releases/latest). The bundle includes `DisplayDJ.app`, the standalone `display-cli`, and the legacy-compatible `displaydj` command.
+
+The current downloads are for Apple Silicon only. They use ad-hoc signing and are not Developer ID signed or Apple-notarized, so macOS may block the first launch. Control-click DisplayDJ in Finder and choose **Open**, or allow it in **System Settings → Privacy & Security**. Global shortcuts require Accessibility permission; if they do not work immediately after authorization, quit and reopen DisplayDJ. See the [release notes](docs/RELEASE-NOTES-1.0.0.md) for the complete installation and compatibility notes.
+
+### Install the command-line tool
+
+The ZIP and DMG contain the CLI inside the app bundle; they do not install it on your PATH. After placing `DisplayDJ.app` in `/Applications`, you can run it directly:
+
+```bash
+/Applications/DisplayDJ.app/Contents/MacOS/display-cli doctor --json
+```
+
+To use `display-cli` from any directory, copy the bundled executable into your user directory. Opening the app is not required:
+
+```bash
+mkdir -p "$HOME/.local/bin"
+cp /Applications/DisplayDJ.app/Contents/MacOS/display-cli "$HOME/.local/bin/display-cli"
+export PATH="$HOME/.local/bin:$PATH"
+display-cli version --json
+display-cli doctor --json
+```
+
+Add `export PATH="$HOME/.local/bin:$PATH"` to `~/.zshrc` for future terminals. Copy the executable again after updating the app to update the CLI. For legacy scripts, also copy `Contents/MacOS/displaydj`. CLI-only users can copy the executable directly out of the ZIP's app bundle without installing or opening the menu bar app. macOS download security checks still apply on first execution.
+
+### Everyday CLI use
+
+These examples use `display-cli` installed on your PATH. Replace `UUID` and `MODE_ID` with actual values from the discovery commands.
+
+```bash
+display-cli doctor --json
+display-cli displays --json
+
+# Copy a target UUID from the displays output; brightness is 0…1 or an explicit percentage
+display-cli brightness set 60% --display 'uuid:<UUID>'
+display-cli brightness set +5% --display 'uuid:<UUID>'
+display-cli brightness restore
+
+# Keep the system awake only while one command is running
+display-cli keepawake run -- make test
+
+# Let the task lifecycle manage start, running, completion, and restoration
+# The default configuration changes display brightness, so inspect it first
+display-cli config show
+display-cli agent run --label 'test suite' -- make test
+```
+
+### Optional background service
+
+Ordinary CLI operations do not require the service. Start it only when you need HTTP access, Gamma dimming or leases that persist after a command exits, or agent sessions managed across commands. The settings window also provides an explicit start button, and the CLI can stop the service afterward. Install the login item only if you explicitly want the service to start after login.
+
+```bash
+display-cli serve --detach
+display-cli daemon status
+display-cli daemon stop
+
+# Optional: start after login; run daemon uninstall to disable autostart
+display-cli daemon install
+display-cli daemon uninstall
+```
+
+Run the background service only when persistent state or HTTP access is needed; the app does not automatically install a login item or start the service. If you installed the login item with `daemon install`, the service will restart after `daemon stop`; use `daemon uninstall` to disable autostart. See the [architecture documentation](docs/ARCHITECTURE.md) for module relationships and migration notes.
+
 ## Connection control, from the app or CLI
 
 Each online display card includes a disconnect control when the operation is available and safe. Displays taken offline by DisplayDJ remain listed in a dedicated section with a **Reconnect** action. The CLI exposes the same workflow with structured output for scripts:
 
 ```bash
 # Find the stable UUID of the target display
-.build/debug/display-cli displays --json
+display-cli displays --json
 
 # Remove one display from the macOS desktop, then bring it back
-.build/debug/display-cli disconnect --display uuid:<UUID>
-.build/debug/display-cli connect --display uuid:<UUID>
+display-cli disconnect --display 'uuid:<UUID>'
+display-cli connect --display 'uuid:<UUID>'
 ```
 
 Disconnecting is intentionally limited to one stable target at a time. DisplayDJ will not disconnect a mirrored display or the last online display. A saved reconnect record is retained when verification fails, so a later reconnect can still recover the target.
@@ -64,80 +130,20 @@ DisplayDJ supports external-display contrast and volume, selection among display
 
 ```bash
 # Use the CLI by itself; the menu bar app does not need to be running
-.build/debug/display-cli volume get --display external --json
-.build/debug/display-cli contrast set 60% --display uuid:<UUID> --dry-run --json
-.build/debug/display-cli modes list --display main --json
-.build/debug/display-cli modes set <MODE_ID> --display uuid:<UUID> --dry-run --json
+display-cli volume get --display external --json
+display-cli contrast set 60% --display 'uuid:<UUID>' --dry-run --json
+display-cli modes list --display main --json
+display-cli modes set MODE_ID --display 'uuid:<UUID>' --dry-run --json
 
 # Save current brightness, preview the change, then apply it
 # Applying a profile that contains Gamma settings requires the local service
-.build/debug/display-cli profile save work
-.build/debug/display-cli profile apply work --dry-run --json
-.build/debug/display-cli profile apply work
+display-cli profile save work
+display-cli profile apply work --dry-run --json
+display-cli profile apply work
 
-# Build the local app and open its display settings window
-./script/build_and_run.sh --tools
+# Open the installed app’s display settings window
+open -a DisplayDJ --args --display-tools
 ```
-
-## Quick start
-
-### Download the app
-
-Download the arm64 ZIP or DMG from the [v1.0.0 release](https://github.com/hellowmq/displaydj/releases/tag/v1.0.0). The bundle includes `DisplayDJ.app`, the standalone `display-cli`, and the legacy-compatible `displaydj` command.
-
-The current downloads are for Apple Silicon only. They use ad-hoc signing and are not Developer ID signed or Apple-notarized, so macOS may block the first launch. Control-click DisplayDJ in Finder and choose **Open**, or allow it in **System Settings → Privacy & Security**. Global shortcuts require Accessibility permission; if they do not work immediately after authorization, quit and reopen DisplayDJ. See the [release notes](docs/RELEASE-NOTES-1.0.0.md) for the complete installation and compatibility notes.
-
-### Build from source
-
-You need macOS 13+, a Swift 6.0+ toolchain, and Python 3 for packaging and smoke tests only. The first build fetches Apple's `swift-argument-parser`; the main CLI, hardware core, and HTTP layer do not themselves use that dependency.
-
-#### Menu bar app
-
-```bash
-swift build
-bash scripts/build-app.sh
-open '.build/DisplayDJ.app'
-```
-
-The app's brightness cards support external DDC displays and native backlight control for built-in displays. The settings window also provides per-display Gamma software dimming: it reads the current value when the window opens or the selected display changes, then applies the value when the slider is released. If the service is not running, the user must explicitly click **Enable Software Dimming**. Shortcuts can target either the selected display or the display under the pointer. Multi-display hardware-brightness synchronization is off by default. The app does not install a login item automatically.
-
-#### Standalone CLI
-
-After running `swift build --product display-cli`, you can use the CLI without opening the app or starting the background service. You may also copy the executable into a directory on your PATH. The app bundle includes both `Contents/MacOS/display-cli` and the `displaydj` compatibility command.
-
-```bash
-.build/debug/display-cli doctor --json
-.build/debug/display-cli displays --json
-
-# Copy a target UUID from the displays output; brightness is 0…1 or an explicit percentage
-.build/debug/display-cli brightness set 60% --display uuid:<UUID>
-.build/debug/display-cli brightness set +5% --display uuid:<UUID>
-.build/debug/display-cli brightness restore
-
-# Keep the system awake only while one command is running
-.build/debug/display-cli keepawake run -- make test
-
-# Let the task lifecycle manage start, running, completion, and restoration
-# The default configuration changes display brightness, so inspect it first
-.build/debug/display-cli config show
-.build/debug/display-cli agent run --label 'test suite' -- make test
-```
-
-#### Optional background service
-
-Ordinary CLI operations do not require the service. Start it only when you need HTTP access, Gamma dimming or leases that persist after a command exits, or agent sessions managed across commands. The settings window also provides an explicit start button, and the CLI can stop the service afterward. Install the login item only if you explicitly want the service to start after login.
-
-```bash
-.build/debug/display-cli serve --detach
-.build/debug/display-cli daemon status
-.build/debug/display-cli daemon stop
-
-# Optional: start after login; run daemon uninstall to disable autostart
-.build/debug/display-cli daemon install
-.build/debug/display-cli daemon uninstall
-```
-
-Run the background service only when persistent state or HTTP access is needed; the app does not automatically install a login item or start the service. If you installed the login item with `daemon install`, the service will restart after `daemon stop`; use `daemon uninstall` to disable autostart. See the [architecture documentation](docs/ARCHITECTURE.md) for module relationships and migration notes.
 
 ## Reliability guarantees and limits
 
@@ -163,6 +169,29 @@ Restoration is not an absolute guarantee. `SIGKILL` prevents cleanup, although s
 | Distribution | arm64 ZIP, DMG, and SHA-256 files; ad-hoc signed and not notarized, with no universal build or Developer ID validation yet |
 
 ## Development and packaging
+
+### Build from source
+
+You need macOS 13+, a Swift 6.0+ toolchain, and Python 3 for packaging and smoke tests only. The first build fetches Apple's `swift-argument-parser`; the main CLI, hardware core, and HTTP layer do not themselves use that dependency.
+
+#### Menu bar app
+
+```bash
+swift build
+bash scripts/build-app.sh
+open '.build/DisplayDJ.app'
+```
+
+#### Standalone CLI
+
+```bash
+swift build -c release --product display-cli
+bin_dir="$(swift build -c release --show-bin-path)"
+mkdir -p "$HOME/.local/bin"
+cp "$bin_dir/display-cli" "$HOME/.local/bin/display-cli"
+export PATH="$HOME/.local/bin:$PATH"
+display-cli version --json
+```
 
 GitHub Actions runs the same core checks on `macos-15` for every push and pull request:
 

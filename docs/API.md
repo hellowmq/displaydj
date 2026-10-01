@@ -1,5 +1,7 @@
 # CLI 与 HTTP
 
+安装步骤见 [README](../README.zh-CN.md#安装命令行工具)。
+
 主入口：`display-cli help`。使用 `--json` 获取 `{ "ok": true, "data": ... }` 或错误 envelope。退出码：0 成功，1 后端/IO 等失败，2 参数或配置问题，3 未找到，4 不支持，5 daemon 问题，6 未授权。批量亮度结果还需检查 `data.results[].ok`；HTTP 200 或外层 `ok` 不代表每块显示器都成功。
 
 | CLI | HTTP |
@@ -35,7 +37,7 @@ display-cli daemon stop
 
 `displaydj` 兼容 CLI 保留自己的 schemaVersion 1 和 0/2/3/4/5/6/7/8/9/70 退出码。它的 `set brightness 60` 使用 0–100，而主 CLI 的裸数使用 0–1；迁移时建议统一写 `60%`。
 
-## v0.3.0 预览版显示控制与预设
+## 显示控制与预设
 
 三类能力同时提供 CLI 和 HTTP；App 的“显示设置与预设”窗口调用内置 `display-cli`。`displaydj` 兼容命令没有新增这些子命令。
 
