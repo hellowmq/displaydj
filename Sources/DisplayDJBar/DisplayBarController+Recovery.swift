@@ -18,6 +18,7 @@ extension DisplayBarController {
     let wasEnabled = hotkeys.isEnabled
     hotkeys.setEnabled(enabled)
     hotkeysEnabled = hotkeys.isEnabled
+    if !enabled { discardKeyboardSteps(from: .shortcut) }
     refreshAccessibilityPermission()
     if BrightnessHotkeyPermissionRequest.shouldPrompt(
       wasEnabled: wasEnabled,
@@ -33,6 +34,30 @@ extension DisplayBarController {
     BrightnessHotkeyTargetPreference().target = target
     hotkeyTarget = target
     hotkeySettingsLogger.info("brightness hotkey target changed mode=\(target.rawValue, privacy: .public)")
+  }
+
+  func setMediaKeysEnabled(_ enabled: Bool) {
+    let wasEnabled = mediaKeys.isEnabled
+    mediaKeys.setEnabled(enabled)
+    mediaKeysEnabled = enabled
+    if !enabled {
+      discardKeyboardSteps(from: .mediaKey)
+    }
+    refreshAccessibilityPermission()
+    if BrightnessHotkeyPermissionRequest.shouldPrompt(
+      wasEnabled: wasEnabled, isEnabled: enabled, isTrusted: hasAccessibilityPermission
+    ) { requestAccessibilityPermission() }
+  }
+
+  /// Resolve synchronously at key-down, including WindowServer's current online state.
+  /// Discovery may lag an unplug event; in that gap we must not swallow the system key.
+  func mediaKeyTargetStableID() -> String? {
+    guard let id = hotkeyTargetStableID() else { return nil }
+    let matches = displays.filter { $0.stableID == id }
+    guard matches.count == 1, let display = matches.first,
+          CGDisplayIsActive(display.runtimeID) != 0,
+          CGDisplayIsInMirrorSet(display.runtimeID) == 0 else { return nil }
+    return id
   }
 
   /// Snapshot the pointer's screen at the key event. A missing mapping must stop the event;
@@ -60,11 +85,13 @@ extension DisplayBarController {
   /// removing its own explanation, and did the one thing that would have acted on it nowhere.
   func refreshAccessibilityPermission() {
     hasAccessibilityPermission = hotkeys.reconcileObservers()
+    mediaKeys.reconcile()
   }
 
   /// Requests the system-owned permission prompt after an explicit user action.
   func requestAccessibilityPermission() {
     hasAccessibilityPermission = hotkeys.requestAccessibilityPermission()
+    mediaKeys.reconcile()
   }
 
   /// Opens the accessibility pane so the user can grant trust deliberately.

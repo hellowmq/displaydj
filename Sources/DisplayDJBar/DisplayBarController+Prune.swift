@@ -44,5 +44,7 @@ extension DisplayBarController {
     // left to Core's write/restore semantics and merely flagged, so its result is discarded
     // rather than filed against a display that is gone.
     intents.prune(keeping: liveIDs)
+    discardKeyboardSteps(for: Set(keyboardRevisions.keys).subtracting(liveIDs))
+    keyboardFeedbackIDs.formIntersection(liveIDs)
   }
 }

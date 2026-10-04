@@ -4,41 +4,10 @@ import OSLog
 private let brightnessWriteLogger = Logger(
   subsystem: "io.github.hellowmq.displaydj", category: "BrightnessWrite"
 )
-private let brightnessHotkeyLogger = Logger(
-  subsystem: "io.github.hellowmq.displaydj", category: "BrightnessHotkey"
-)
 
 // MARK: - Write
 
 extension DisplayBarController {
-
-  /// Applies a relative step to the selected display, on behalf of the hotkeys.
-  ///
-  /// Unlike the card's `±` buttons, this runs with the popover closed, which is the whole
-  /// point of a shortcut — and in that state there may be no reading to step from. Polling is
-  /// deliberately stopped while the popover is shut, and if it was never opened this session
-  /// the display list is empty too, so `displayedBrightness` is routinely `nil` exactly when
-  /// the hotkey is used. Returning on that `nil`, as the card path does, made the feature the
-  /// user opted into silently do nothing — the same silent discard the intent buffer exists to
-  /// prevent, arriving through the one entrance that has no button to grey out and no card to
-  /// show a banner on.
-  ///
-  /// So a missing starting point is fetched rather than treated as a refusal. The read is
-  /// awaited before stepping because a relative change is meaningless without it.
-  func adjustBrightnessViaHotkey(by delta: Int) async {
-    if displays.isEmpty {
-      await scanAndRefresh()
-    }
-    guard let stableID = hotkeyTargetStableID() else {
-      brightnessHotkeyLogger.warning("brightness hotkey skipped: target screen unavailable")
-      return
-    }
-    brightnessHotkeyLogger.debug("brightness hotkey target index=\(self.displays.firstIndex(where: { $0.stableID == stableID }) ?? -1) mode=\(self.hotkeyTarget.rawValue, privacy: .public)")
-    if displayedBrightness(for: stableID) == nil {
-      await refreshDisplay(stableID: stableID, trigger: .userRequest)
-    }
-    adjustBrightness(by: delta, for: stableID)
-  }
 
   func adjustBrightness(by delta: Int, for stableID: String) {
     guard let current = displayedBrightness(for: stableID) else { return }
@@ -47,7 +16,8 @@ extension DisplayBarController {
     Task { await setBrightness(target, for: stableID) }
   }
 
-  func setBrightness(_ value: Int, for stableID: String, synchronize: Bool = true) async {
+  func setBrightness(_ value: Int, for stableID: String, synchronize: Bool = true,
+                     showKeyboardFeedback: Bool = false, relativeSteps: [Int]? = nil) async {
     guard !displays.isEmpty else { return }
     guard !isPreparingBrightnessSync else {
       failures.topology = BrightnessFailure(
@@ -68,20 +38,33 @@ extension DisplayBarController {
       let ids = displays.compactMap(\.stableID)
       var values: [String: Int] = [:]
       for id in ids { values[id] = displayedBrightness(for: id) }
+      let group: [BrightnessIntent]?
+      if let relativeSteps {
+        group = BrightnessSyncPlan.intents(sourceID: stableID, steps: relativeSteps,
+                                          orderedIDs: ids, current: values)
+      } else {
+        group = BrightnessSyncPlan.intents(sourceID: stableID, target: target,
+                                          orderedIDs: ids, current: values)
+      }
       if ids.count == displays.count,
-        let group = BrightnessSyncPlan.intents(
-          sourceID: stableID, target: target, orderedIDs: ids, current: values
-        ) {
+        let group, group.first?.value == target {
         planned = group
         brightnessWriteLogger.info("synchronized brightness intent targetCount=\(group.count)")
       } else {
         stopBrightnessSyncForMissingBaseline()
       }
     }
+    if !showKeyboardFeedback {
+      discardKeyboardSteps(for: Set(planned.map(\.displayStableID)))
+    }
     for intent in planned {
       intents.submit(intent)
       setIntendedForDisplay(intent.value, id: intent.displayStableID)
       clearFailure(for: intent.displayStableID)
+      if showKeyboardFeedback { keyboardFeedbackIDs.insert(intent.displayStableID) }
+      if keyboardFeedbackIDs.contains(intent.displayStableID) {
+        self.showKeyboardFeedback(for: intent.displayStableID, state: .changing(intent.value))
+      }
     }
     // Starting a write on this display supersedes only this display's own banner. Banners
     // are filed per display, so a nudge on one card can no longer erase a neighbour's error
@@ -118,6 +101,7 @@ extension DisplayBarController {
       // last confirmed reading — the cards would visibly snap backwards mid-drain.
       if intents.latestValue(for: intent.displayStableID) == nil {
         setIntendedForDisplay(nil, id: intent.displayStableID)
+        keyboardFeedbackIDs.remove(intent.displayStableID)
       }
     }
     isWriting = false
@@ -147,6 +131,10 @@ extension DisplayBarController {
       // Succeeding on one display resolves only that display's banner; every other card's
       // failure is still unresolved and keeps its retry button.
       clearFailure(for: intent.displayStableID)
+      if keyboardFeedbackIDs.contains(intent.displayStableID),
+         intents.latestValue(for: intent.displayStableID) == intent.value {
+        showKeyboardFeedback(for: intent.displayStableID, state: .confirmed(verified))
+      }
     } catch {
       // Deliberately *not* filtered for cancellation, unlike the read path. Writes are never
       // cancelled by this app, and Core only raises a bare `CancellationError` here after it
@@ -168,6 +156,10 @@ extension DisplayBarController {
         ),
         for: intent.displayStableID
       )
+      if keyboardFeedbackIDs.contains(intent.displayStableID) {
+        showKeyboardFeedback(for: intent.displayStableID,
+                             state: .failed(failure(for: intent.displayStableID)?.summary ?? "亮度调节失败"))
+      }
     }
   }
 }

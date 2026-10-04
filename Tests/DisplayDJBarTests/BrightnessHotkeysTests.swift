@@ -156,3 +156,60 @@ func accessibilityPromptFollowsFreshOptIn() {
     BrightnessHotkeyPermissionRequest.shouldPrompt(
       wasEnabled: true, isEnabled: false, isTrusted: false) == false)
 }
+
+@Test("Captured shortcut down, repeats and release are consumed without duplicate release action")
+func shortcutConsumesCompletePress() {
+  var routing = BrightnessHotkeyRouting()
+  for repeated in [false, true, true] {
+    let decision = routing.handle(keyCode: 24, isDown: true, isRepeat: repeated,
+                                  characters: "=", modifiers: [.control, .command])
+    #expect(decision.consume)
+    #expect(decision.hotkey == .increase)
+  }
+  let up = routing.handle(keyCode: 24, isDown: false, isRepeat: false,
+                          characters: "=", modifiers: [])
+  #expect(up.consume)
+  #expect(up.hotkey == nil)
+  #expect(!routing.handle(keyCode: 24, isDown: true, isRepeat: true,
+                          characters: "=", modifiers: [.control, .command]).consume)
+}
+
+@Test("Modifier changes stop brightness repeats but do not leak the captured press")
+func shortcutModifierReleaseDoesNotLeak() {
+  var routing = BrightnessHotkeyRouting()
+  _ = routing.handle(keyCode: 27, isDown: true, isRepeat: false,
+                     characters: "-", modifiers: [.control, .command])
+  let repeatEvent = routing.handle(keyCode: 27, isDown: true, isRepeat: true,
+                                   characters: "-", modifiers: .command)
+  #expect(repeatEvent.consume)
+  #expect(repeatEvent.hotkey == nil)
+  #expect(routing.handle(keyCode: 27, isDown: false, isRepeat: false,
+                         characters: "-", modifiers: []).consume)
+}
+
+@Test("Ordinary shortcuts and presses begun elsewhere are not captured midway through a hold")
+func shortcutLeavesOtherApplicationPressesAlone() {
+  var routing = BrightnessHotkeyRouting()
+  #expect(!routing.handle(keyCode: 24, isDown: true, isRepeat: false,
+                          characters: "=", modifiers: .command).consume)
+  #expect(!routing.handle(keyCode: 24, isDown: true, isRepeat: true,
+                          characters: "=", modifiers: [.control, .command]).consume)
+  #expect(!routing.handle(keyCode: 24, isDown: false, isRepeat: false,
+                          characters: "=", modifiers: [.control, .command]).consume)
+  #expect(!routing.handle(keyCode: 27, isDown: true, isRepeat: true,
+                          characters: "-", modifiers: [.control, .command]).consume)
+}
+
+@Test("Reset drops stale shortcut ownership after wake or listener restart")
+func shortcutResetDropsOwnership() {
+  var routing = BrightnessHotkeyRouting()
+  _ = routing.handle(keyCode: 24, isDown: true, isRepeat: false,
+                     characters: "=", modifiers: [.control, .command])
+  routing.reset()
+  #expect(!routing.handle(keyCode: 24, isDown: false, isRepeat: false,
+                          characters: "=", modifiers: []).consume)
+  let next = routing.handle(keyCode: 27, isDown: true, isRepeat: false,
+                            characters: "-", modifiers: [.control, .command])
+  #expect(next.consume)
+  #expect(next.hotkey == .decrease)
+}

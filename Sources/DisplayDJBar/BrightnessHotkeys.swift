@@ -138,164 +138,184 @@ enum BrightnessHotkeyTargetResolver {
   }
 }
 
-/// Owns the keyboard observers so they exist only while the user has opted in.
-///
-/// No monitor is installed at launch. `setEnabled(false)` removes every monitor, so a
-/// disabled app observes nothing at all rather than observing and then ignoring events.
+/// Keeps ownership until release, including when modifiers are released before the key.
+/// A repeat without an observed initial press must stay with the original application.
+struct BrightnessHotkeyRouting {
+  private enum Owner { case application, brightness(BrightnessHotkey) }
+  private var pressed: [UInt16: Owner] = [:]
+
+  mutating func handle(keyCode: UInt16, isDown: Bool, isRepeat: Bool,
+                       characters: String?, modifiers: NSEvent.ModifierFlags)
+    -> (consume: Bool, hotkey: BrightnessHotkey?) {
+    if !isDown {
+      if case .brightness = pressed.removeValue(forKey: keyCode) {
+        return (true, nil)
+      }
+      return (false, nil)
+    }
+    if !isRepeat {
+      if let hotkey = BrightnessHotkey.resolve(characters: characters, modifiers: modifiers) {
+        pressed[keyCode] = .brightness(hotkey)
+      } else {
+        pressed[keyCode] = .application
+      }
+    }
+    guard case .brightness(let hotkey) = pressed[keyCode] else { return (false, nil) }
+    // Continue swallowing the captured press, but stop changing brightness if modifiers change.
+    return (true, modifiers.intersection(.deviceIndependentFlagsMask)
+      == BrightnessHotkey.requiredModifiers ? hotkey : nil)
+  }
+
+  mutating func reset() { pressed.removeAll() }
+}
+
+/// An active event tap consumes shortcuts before they reach the foreground application.
+/// The local monitor is a fallback when global interception is unavailable, never a second handler.
 @MainActor
 final class BrightnessHotkeyCoordinator {
-  private nonisolated(unsafe) var globalMonitor: Any?
+  private nonisolated(unsafe) var port: CFMachPort?
+  private nonisolated(unsafe) var source: CFRunLoopSource?
   private nonisolated(unsafe) var localMonitor: Any?
+  private nonisolated(unsafe) var permissionTimer: Timer?
+  private var routing = BrightnessHotkeyRouting()
   private var preference: BrightnessHotkeyPreference
   private let onTrigger: (BrightnessHotkey) -> Void
-  /// Whether accessibility trust was in force when the current global observer was created.
-  ///
-  /// Recorded because it cannot be recovered afterwards. A global key observer created without
-  /// trust is a perfectly valid object that never fires, so neither the observer nor `NSEvent`
-  /// can be asked whether it works — the only way to know is to remember the conditions it was
-  /// built under and compare them against the conditions now.
-  private var globalMonitorHasTrust = false
-
   private(set) var isEnabled: Bool
 
-  init(
-    preference: BrightnessHotkeyPreference = BrightnessHotkeyPreference(),
-    onTrigger: @escaping (BrightnessHotkey) -> Void
-  ) {
+  init(preference: BrightnessHotkeyPreference = BrightnessHotkeyPreference(),
+       onTrigger: @escaping (BrightnessHotkey) -> Void) {
     self.preference = preference
     self.onTrigger = onTrigger
     self.isEnabled = preference.isEnabled
   }
 
-  /// Installs monitors only when the persisted choice is already an opt-in.
   func activateStoredPreference() {
     isEnabled = preference.isEnabled
-    if isEnabled {
-      installMonitors()
-    }
+    updateMonitors()
   }
 
   func setEnabled(_ enabled: Bool) {
     preference.isEnabled = enabled
     isEnabled = enabled
-    if enabled {
-      installMonitors()
-    } else {
-      removeMonitors()
-    }
+    updateMonitors()
   }
 
-  /// Whether macOS grants the accessibility trust a global observer needs.
-  /// Read-only: it never raises a system prompt on the user's behalf.
-  func hasAccessibilityPermission() -> Bool {
-    AXIsProcessTrusted()
-  }
+  func hasAccessibilityPermission() -> Bool { AXIsProcessTrusted() }
 
-  /// Asks macOS to explain and register the missing Accessibility permission.
-  ///
-  /// This is called only from an explicit user action: turning the shortcut on or pressing
-  /// the request button. The system prompt is asynchronous, so its return value is only the
-  /// trust state at the time of the call; activation reconciliation handles a later grant.
   @discardableResult
   func requestAccessibilityPermission() -> Bool {
-    // Spell the documented CFDictionary key directly. In the macOS 27 SDK the imported
-    // `kAXTrustedCheckOptionPrompt` C global is incorrectly exposed as mutable shared state,
-    // which Swift 6 rejects even though this call is main-actor isolated.
     let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
     return AXIsProcessTrustedWithOptions(options)
   }
 
-  /// Re-creates the global observer if it was created before trust was granted.
-  ///
-  /// Called whenever the app re-reads the trust, because that read is the only moment it can
-  /// discover the change. `NSEvent` does not report it, the observer does not fail visibly, and
-  /// the grant happens in System Settings while this app is not even frontmost.
-  ///
-  /// Returns the trust it observed so the caller can publish the same value it acted on, rather
-  /// than reading `AXIsProcessTrusted()` a second time and possibly getting a different answer.
   @discardableResult
   func reconcileObservers() -> Bool {
-    let isTrustedNow = hasAccessibilityPermission()
-    switch HotkeyObservers.action(
-      hotkeysEnabled: isEnabled,
-      installedWithTrust: globalMonitorHasTrust,
-      isTrustedNow: isTrustedNow
-    ) {
-    case .keepExisting:
-      // Trust that has *fallen* is still recorded, even though nothing is reinstalled. The
-      // record describes the observer, so leaving it claiming a trust that no longer holds
-      // would make the eventual re-grant look like no change at all — and the dead observer
-      // would then never be replaced.
-      globalMonitorHasTrust = globalMonitorHasTrust && isTrustedNow
-    case .reinstallGlobalObserver:
-      // Only the global one. The local observer needs no trust and has been working all along;
-      // tearing it down would introduce a gap for the sake of symmetry.
-      removeGlobalMonitor()
-      installMonitors()
+    let trusted = hasAccessibilityPermission()
+    guard isEnabled, trusted else {
+      if port != nil { stopTap() }
+      return trusted
     }
-    return isTrustedNow
+    let active = port.map { CGEvent.tapIsEnabled(tap: $0) } ?? false
+    if HotkeyObservers.action(hotkeysEnabled: isEnabled,
+                             installedWithTrust: active, isTrustedNow: trusted)
+      == .reinstallGlobalObserver {
+      stopTap()
+      installTap()
+    }
+    return trusted
   }
 
   func openAccessibilitySettings() {
-    guard
-      let url = URL(
-        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-      )
-    else { return }
+    guard let url = URL(
+      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+    ) else { return }
     NSWorkspace.shared.open(url)
   }
 
-  private func installMonitors() {
-    if globalMonitor == nil {
-      globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-        self?.handle(event)
-      }
-      // Stamped at the moment of creation, because that is when the observer's privileges are
-      // decided. Reading the trust later says what the *app* is allowed to do, not what this
-      // particular observer was granted when it was made.
-      globalMonitorHasTrust = hasAccessibilityPermission()
+  private func updateMonitors() {
+    guard isEnabled else {
+      permissionTimer?.invalidate()
+      permissionTimer = nil
+      stopTap()
+      if let localMonitor { NSEvent.removeMonitor(localMonitor) }
+      localMonitor = nil
+      return
     }
     if localMonitor == nil {
-      localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-        self?.handle(event)
-        return event
+      localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) {
+        [weak self] event in
+        guard let self else { return event }
+        // A functioning tap has already decided whether this event belongs to us.
+        if let port = self.port, CGEvent.tapIsEnabled(tap: port) { return event }
+        return self.handle(event) ? nil : event
       }
     }
-  }
-
-  private func removeGlobalMonitor() {
-    if let globalMonitor {
-      NSEvent.removeMonitor(globalMonitor)
-      self.globalMonitor = nil
+    if permissionTimer == nil {
+      let timer = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
+        MainActor.assumeIsolated { _ = self?.reconcileObservers() }
+      }
+      RunLoop.main.add(timer, forMode: .common)
+      permissionTimer = timer
     }
-    globalMonitorHasTrust = false
+    reconcileObservers()
   }
 
-  private func removeMonitors() {
-    removeGlobalMonitor()
-    if let localMonitor {
-      NSEvent.removeMonitor(localMonitor)
-      self.localMonitor = nil
+  private func installTap() {
+    let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
+      | CGEventMask(1 << CGEventType.keyUp.rawValue)
+    let callback: CGEventTapCallBack = { _, type, event, context in
+      guard let context else { return Unmanaged.passUnretained(event) }
+      let consumed = MainActor.assumeIsolated {
+        let owner = Unmanaged<BrightnessHotkeyCoordinator>.fromOpaque(context).takeUnretainedValue()
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+          owner.resetPressedKeys()
+          return false
+        }
+        guard owner.hasAccessibilityPermission(),
+              let nsEvent = NSEvent(cgEvent: event) else { return false }
+        return owner.handle(nsEvent)
+      }
+      return consumed ? nil : Unmanaged.passUnretained(event)
     }
+    guard let tap = CGEvent.tapCreate(
+      tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
+      eventsOfInterest: mask, callback: callback,
+      userInfo: Unmanaged.passUnretained(self).toOpaque()
+    ) else { return }
+    guard let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
+      CFMachPortInvalidate(tap)
+      return
+    }
+    port = tap
+    source = runLoopSource
+    CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
+    CGEvent.tapEnable(tap: tap, enable: true)
   }
 
-  private func handle(_ event: NSEvent) {
-    guard isEnabled else { return }
-    guard
-      let hotkey = BrightnessHotkey.resolve(
-        characters: event.charactersIgnoringModifiers,
-        modifiers: event.modifierFlags
-      )
-    else { return }
-    onTrigger(hotkey)
+  private func handle(_ event: NSEvent) -> Bool {
+    guard isEnabled, event.type == .keyDown || event.type == .keyUp else { return false }
+    let decision = routing.handle(keyCode: event.keyCode, isDown: event.type == .keyDown,
+                                  isRepeat: event.type == .keyDown && event.isARepeat,
+                                  characters: event.charactersIgnoringModifiers,
+                                  modifiers: event.modifierFlags)
+    if let hotkey = decision.hotkey { onTrigger(hotkey) }
+    return decision.consume
+  }
+
+  func resetPressedKeys() { routing.reset() }
+
+  private func stopTap() {
+    if let source { CFRunLoopSourceInvalidate(source) }
+    if let port { CFMachPortInvalidate(port) }
+    source = nil
+    port = nil
+    routing.reset()
   }
 
   deinit {
-    if let globalMonitor {
-      NSEvent.removeMonitor(globalMonitor)
-    }
-    if let localMonitor {
-      NSEvent.removeMonitor(localMonitor)
-    }
+    permissionTimer?.invalidate()
+    if let source { CFRunLoopSourceInvalidate(source) }
+    if let port { CFMachPortInvalidate(port) }
+    if let localMonitor { NSEvent.removeMonitor(localMonitor) }
   }
 }

@@ -48,6 +48,9 @@ extension DisplayBarController {
     // enables them, so ⌘= / ⌘- keep their meaning in every other app.
     hotkeys.activateStoredPreference()
     hotkeysEnabled = hotkeys.isEnabled
+    keyboardFeedbackPresenter = { [weak self] in self?.brightnessHUD.show($0) }
+    mediaKeys.activateStoredPreference()
+    mediaKeysEnabled = mediaKeys.isEnabled
     refreshAccessibilityPermission()
     applicationActivationObserver = NotificationCenter.default.addObserver(
       forName: NSApplication.didBecomeActiveNotification,
@@ -88,6 +91,7 @@ extension DisplayBarController {
   }
 
   func scheduleTopologyRescan() {
+    brightnessHUD.hideAll()
     topologyRefreshTask?.cancel()
     topologyRefreshTask = Task { @MainActor [weak self] in
       try? await Task.sleep(for: .milliseconds(400))

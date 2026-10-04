@@ -18,6 +18,7 @@ cp "$bin_dir/displaydj" "$app/Contents/MacOS/displaydj"
 cp LICENSE "$app/Contents/Resources/LICENSE"
 cp LICENSES/DisplayDJ.txt "$app/Contents/Resources/DisplayDJ-LICENSE.txt"
 cp LICENSES/VibeDisplay.txt "$app/Contents/Resources/VibeDisplay-LICENSE.txt"
+cp LICENSES/MediaKeyTap.txt "$app/Contents/Resources/MediaKeyTap-LICENSE.txt"
 iconset="$PWD/.build/DisplayDJIcon.iconset"
 mkdir -p "$iconset"
 for size in 16 32 128 256 512; do

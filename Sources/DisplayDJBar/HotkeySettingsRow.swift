@@ -55,13 +55,33 @@ struct HotkeySettingsRow: View {
         .accessibilityValue(BrightnessAccessibility.hotkeyToggleValue(for: status))
       }
 
+      VStack(alignment: .leading, spacing: 4) {
+        HStack {
+          Text("亮度媒体键").font(compact ? .system(size: 11) : .body)
+          Spacer(minLength: 8)
+          Toggle("亮度媒体键", isOn: Binding(
+            get: { controller.mediaKeysEnabled },
+            set: { controller.setMediaKeysEnabled($0) }
+          ))
+          .labelsHidden()
+          .toggleStyle(.switch)
+          .controlSize(compact ? .mini : .regular)
+          .accessibilityLabel("使用键盘亮度键")
+          .accessibilityValue(controller.mediaKeysStatus.message)
+        }
+        Text(controller.mediaKeysStatus.message)
+          .font(compact ? .system(size: 10) : .callout)
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+
       if controller.displays.count > 1 {
         HStack(spacing: 8) {
-          Text("快捷键目标")
+          Text("按键目标")
             .font(compact ? .system(size: 11) : .body)
           Spacer(minLength: 8)
           Picker(
-            "快捷键目标",
+            "按键目标",
             selection: Binding(
               get: { controller.hotkeyTarget },
               set: { controller.setHotkeyTarget($0) }
@@ -78,7 +98,7 @@ struct HotkeySettingsRow: View {
         }
       }
 
-      if status.showsPermissionNotice {
+      if status.showsPermissionNotice || controller.mediaKeysStatus == .permissionRequired {
         permissionNotice
       }
     }

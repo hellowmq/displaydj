@@ -233,10 +233,31 @@ final class DisplayBarController: NSObject, ObservableObject {
   /// the popover closed, which is precisely the state in which polling is stopped and no
   /// reading may be on hand.
   lazy var hotkeys = BrightnessHotkeyCoordinator { [weak self] hotkey in
-    Task { @MainActor [weak self] in
-      await self?.adjustBrightnessViaHotkey(by: hotkey.delta)
-    }
+    guard let self, let id = self.hotkeyTargetStableID() else { return }
+    self.enqueueKeyboardBrightness(by: hotkey.delta, for: id)
   }
+
+  lazy var mediaKeys = BrightnessMediaKeyCoordinator(
+    target: { [weak self] in self?.mediaKeyTargetStableID() },
+    trigger: { [weak self] id, delta in
+      self?.enqueueKeyboardBrightness(by: delta, for: id, source: .mediaKey)
+    },
+    statusChanged: { [weak self] status in
+      self?.mediaKeysStatus = status
+      if status == .permissionRequired {
+        self?.discardKeyboardSteps(from: .mediaKey)
+      }
+    }
+  )
+  @Published var mediaKeysEnabled = false
+  @Published var mediaKeysStatus: BrightnessMediaKeyStatus = .disabled
+  var keyboardSteps: [KeyboardBrightnessStep] = []
+  var keyboardRevisions: [String: UUID] = [:]
+  var keyboardTask: Task<Void, Never>?
+  var keyboardFeedbackIDs: Set<String> = []
+  let brightnessHUD = BrightnessHUDController()
+  // Setup connects this to AppKit. Unit tests capture the same feedback without windows.
+  var keyboardFeedbackPresenter: (BrightnessHUDContent) -> Void = { _ in }
 
   /// Whether the user has opted into the brightness hotkeys. Off by default.
   ///
@@ -370,6 +391,11 @@ final class DisplayBarController: NSObject, ObservableObject {
   /// A display waking up has not necessarily disconnected; its previous reading is simply
   /// unverified. Show an empty, inactive track until a fresh read arrives.
   func invalidateBrightnessAfterWake() {
+    mediaKeys.resetPressedKeys()
+    hotkeys.resetPressedKeys()
+    discardKeyboardSteps()
+    keyboardFeedbackIDs.removeAll()
+    brightnessHUD.hideAll()
     refreshTask?.cancel()
     refreshTask = nil
     brightnessByID = [:]
