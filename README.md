@@ -37,7 +37,7 @@ Connection switching uses private macOS APIs and is hardware/system dependent. D
 
 | Entry point | Best for | Implemented capabilities |
 | --- | --- | --- |
-| **DisplayDJ.app** | Everyday desktop use | Brightness cards, scroll-wheel control, optional shortcuts, aliases and sorting, disconnect/reconnect; a display settings window with per-display Gamma, display modes, external-display volume and contrast, brightness profiles, and optional hardware-brightness synchronization |
+| **DisplayDJ.app** | Everyday desktop use | Brightness cards, scroll-wheel control, optional shortcuts and brightness media keys with per-screen feedback, aliases and sorting, disconnect/reconnect; a display settings window with per-display Gamma, display modes, external-display volume and contrast, brightness profiles, and optional hardware-brightness synchronization |
 | **display-cli** | Terminal users, scripts, and coding agents | Display discovery, brightness, restore, disconnect/reconnect, keep-awake, task lifecycle, diagnostics, and service management; no app or background service required |
 | **Optional local service** | Automations that need HTTP access or state that persists across commands | Bearer-token authentication, Gamma, keep-awake leases, sessions, and heartbeats; started and stopped through the CLI |
 
@@ -49,7 +49,7 @@ The `displaydj` compatibility command is also retained, so existing `get brightn
 
 Download the arm64 ZIP or DMG from the [latest release](https://github.com/hellowmq/displaydj/releases/latest). The bundle includes `DisplayDJ.app`, the standalone `display-cli`, and the legacy-compatible `displaydj` command.
 
-The current downloads are for Apple Silicon only. They use ad-hoc signing and are not Developer ID signed or Apple-notarized, so macOS may block the first launch. Control-click DisplayDJ in Finder and choose **Open**, or allow it in **System Settings → Privacy & Security**. Global shortcuts require Accessibility permission; if they do not work immediately after authorization, quit and reopen DisplayDJ. See the [release notes](docs/RELEASE-NOTES-1.0.1.md) for the complete installation and compatibility notes.
+The current downloads are for Apple Silicon only. They use ad-hoc signing and are not Developer ID signed or Apple-notarized, so macOS may block the first launch. Control-click DisplayDJ in Finder and choose **Open**, or allow it in **System Settings → Privacy & Security**. Global shortcuts and optional brightness media keys require Accessibility permission. After replacing an ad-hoc-signed app, remove the old DisplayDJ permission entry and re-add `/Applications/DisplayDJ.app` if global keys stop working; grant Input Monitoring if requested, then quit and reopen DisplayDJ. See the [release notes](docs/RELEASE-NOTES-1.0.2.md) for the complete installation and compatibility notes.
 
 ### Install the command-line tool
 
@@ -213,7 +213,7 @@ Tests cover both original test suites and their integration boundaries. The smok
 - [Architecture and migration](docs/ARCHITECTURE.md)
 - [Provenance and licensing](docs/PROVENANCE.md)
 - [Validation results](docs/VALIDATION.md)
-- [1.0.1 release notes](docs/RELEASE-NOTES-1.0.1.md)
+- [1.0.2 release notes](docs/RELEASE-NOTES-1.0.2.md)
 - [1.0 acceptance checklist](docs/RELEASE-1.0-CHECKLIST.md)
 - [Staged device validation](docs/DEVICE-VALIDATION.md)
 - [Dual-display UI acceptance procedure](docs/GUI-ACCEPTANCE-1.0.md)

@@ -37,7 +37,7 @@ DisplayDJ 把“连接状态”也变成显示器控制的一部分，而不只�
 
 | 入口 | 适合谁 | 已实现能力 |
 | --- | --- | --- |
-| **DisplayDJ.app** | 日常桌面操作 | 亮度卡片、滚轮、可选快捷键、别名与排序、断开/重连；显示设置窗口提供每屏 Gamma、模式、外屏音量/对比度、亮度预设与可选硬件亮度同步 |
+| **DisplayDJ.app** | 日常桌面操作 | 亮度卡片、滚轮、可选快捷键与亮度媒体键、逐屏亮度提示、别名与排序、断开/重连；显示设置窗口提供每屏 Gamma、模式、外屏音量/对比度、亮度预设与可选硬件亮度同步 |
 | **display-cli** | 终端、脚本、编程 Agent | 显示器发现、亮度、恢复、断开/重连、保活、任务阶段、诊断、服务管理；无需启动 App 或后台服务 |
 | **可选本地服务** | 需要 HTTP 接入或跨命令持续状态的自动化 | Bearer token 鉴权、Gamma、保活租约、会话与心跳；通过 CLI 启停 |
 
@@ -49,7 +49,7 @@ DisplayDJ 把“连接状态”也变成显示器控制的一部分，而不只�
 
 从 [最新发布](https://github.com/hellowmq/displaydj/releases/latest) 下载 arm64 ZIP 或 DMG。安装包同时包含 `DisplayDJ.app`、独立的 `display-cli` 和兼容旧脚本的 `displaydj` 命令。
 
-当前下载包仅支持 Apple Silicon，采用 ad-hoc 签名，尚未经过 Developer ID 签名和 Apple 公证，因此 macOS 可能阻止首次启动。可在 Finder 中按住 Control 点击 DisplayDJ 并选择“打开”，或前往“系统设置 → 隐私与安全性”允许打开。全局快捷键还需要辅助功能权限；若授权后没有立即生效，请退出并重新打开 DisplayDJ。完整安装说明与兼容边界见[发布说明](docs/RELEASE-NOTES-1.0.1.md)。
+当前下载包仅支持 Apple Silicon，采用 ad-hoc 签名，尚未经过 Developer ID 签名和 Apple 公证，因此 macOS 可能阻止首次启动。可在 Finder 中按住 Control 点击 DisplayDJ 并选择“打开”，或前往“系统设置 → 隐私与安全性”允许打开。全局快捷键和可选亮度媒体键需要辅助功能权限。覆盖 ad-hoc 签名 App 后若全局按键失效，请移除旧授权条目，再添加准确的 `/Applications/DisplayDJ.app`；若系统要求输入监控，也请允许，完成后退出并重新打开 DisplayDJ。完整安装说明与兼容边界见[发布说明](docs/RELEASE-NOTES-1.0.2.md)。
 
 ### 安装命令行工具
 
@@ -212,7 +212,7 @@ bash scripts/package-dmg.sh
 - [架构与迁移](docs/ARCHITECTURE.md)
 - [来源与许可](docs/PROVENANCE.md)
 - [验证结果](docs/VALIDATION.md)
-- [1.0.1 发布说明](docs/RELEASE-NOTES-1.0.1.md)
+- [1.0.2 发布说明](docs/RELEASE-NOTES-1.0.2.md)
 - [1.0 验收清单](docs/RELEASE-1.0-CHECKLIST.md)
 - [设备分阶段验证](docs/DEVICE-VALIDATION.md)
 - [双屏界面验收步骤](docs/GUI-ACCEPTANCE-1.0.md)
