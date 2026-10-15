@@ -5,7 +5,7 @@
 Lite 首发新增：
 
 - `Assets/DisplayDJLiteIcon.svg` / `.png`：用户已通过的开口框与圆点图标，构建成 Lite 的 icns；不是 Full 图标替换件。
-- `Assets/Previews/DisplayDJLite-0.1.0.png`：来自 `/Applications/DisplayDJLite.app` 的真实运行窗口，只裁取该窗口。图中的保存记录是恢复入口，不证明目标在线或恢复成功。
+- `Assets/Previews/DisplayDJLite-0.1.0.png`：来自 `/Applications/DisplayDJLite.app` 的真实运行窗口，只裁取该窗口。图中 Dell 已在线，HP 明确标为未接入历史记录。截图本身不替代恢复验收；具体设备证据见 [实体设备验收](LITE-DEVICE-VERIFICATION.md)。
 
 另只读核对 `hellowmq/hellowmq.github.io`：`studio/displaydj-settings-1.0.2.webp` 仍展示 Full 设置页，Full 界面本轮未改，不需换成 Lite。网站若增加 Lite，应另加产品对应素材与入口；本次没有修改或部署网站仓库。
 

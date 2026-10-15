@@ -29,6 +29,14 @@ enum LiteIdentity {
 struct LiteSnapshot: Sendable {
   var displays: [DisplayDescriptor]
   var records: [DisplayConnectionRecord]
+
+  var pendingRecords: [DisplayConnectionRecord] {
+    records.filter { record in
+      record.requiresRediscovery != true || displays.contains {
+        LiteIdentity.stableID($0.stableID) == LiteIdentity.stableID(record.stableID)
+      }
+    }
+  }
 }
 
 struct LiteRuntimeIdentity: Sendable {
@@ -50,11 +58,17 @@ struct LiteConnectionService: LiteConnectionAccess {
   let unavailableReason: String?
   let runtimeIdentity: @Sendable (UInt32) -> LiteRuntimeIdentity?
   var recoveryCutoff: Date = .distantPast
+  var ensureRecoveryProtection: @Sendable () async throws -> Void = {}
 
-  static func live() -> Self {
+  static func live(ensureRecoveryProtection: @escaping @Sendable () async throws -> Void = {
+    throw LiteRefusal("退出恢复保护未就绪，未断开显示器。")
+  }) -> Self {
     let discovery = CoreGraphicsDisplayDiscovery()
     let store = FileDisplayConnectionRecordStore(fileURL: LiteIdentity.recordURL())
-    let controller = try? DisplayConnectionController.live(store: store, disconnectionLifetime: .application)
+    // Physical link/wake-up can exceed the core's 5-second default. Keep the
+    // UI pending for up to 15 seconds; still require the exact stable target.
+    let controller = try? DisplayConnectionController.live(store: store,
+      disconnectionLifetime: .application, verificationAttempts: 75)
     var service = Self(discovery: discovery, store: store, controller: controller,
                 unavailableReason: controller == nil ? "当前系统不支持显示器连接控制。" : nil,
                 runtimeIdentity: { id in
@@ -71,12 +85,27 @@ struct LiteConnectionService: LiteConnectionAccess {
       // With no session boundary, do not trust an absent runtime identity.
       service.recoveryCutoff = .distantFuture
     }
+    service.ensureRecoveryProtection = ensureRecoveryProtection
     return service
   }
 
   func snapshot() async throws -> LiteSnapshot {
     let displays = try await discovery.discoverDisplays()
-    return LiteSnapshot(displays: displays, records: try store.loadRecords())
+    let saved = try store.loadRecords()
+    let records = saved.map { record in
+      guard record.requiresRediscovery != true,
+            let id = LiteIdentity.stableID(record.stableID),
+            !displays.contains(where: { LiteIdentity.stableID($0.stableID) == id }) else { return record }
+      let reused = displays.contains { $0.runtimeID == record.runtimeID } ||
+        runtimeIdentity(record.runtimeID).map { LiteIdentity.stableID($0.stableID) != id } == true
+      guard reused || record.disconnectedAt < recoveryCutoff else { return record }
+      return DisplayConnectionRecord(runtimeID: record.runtimeID, stableID: record.stableID,
+        name: record.name, disconnectedAt: record.disconnectedAt, requiresRediscovery: true)
+    }
+    // Persist before allowing a new disconnect: the old ID must remain unsafe
+    // even while the new display is temporarily absent or the App restarts.
+    if records != saved { try store.saveRecords(records) }
+    return LiteSnapshot(displays: displays, records: records)
   }
 
   func change(_ state: DisplayConnectionState, stableID: String) async throws -> DisplayConnectionOutcome {
@@ -84,7 +113,7 @@ struct LiteConnectionService: LiteConnectionAccess {
       throw LiteRefusal(unavailableReason ?? "无法确认显示器身份，请刷新后重试。")
     }
     let current = try await snapshot()
-    if state == .disconnected, !current.records.isEmpty {
+    if state == .disconnected, !current.pendingRecords.isEmpty {
       throw LiteRefusal("请先恢复已有记录的外屏，再断开另一台。")
     }
     let online = current.displays.filter { LiteIdentity.stableID($0.stableID) == id }
@@ -98,6 +127,9 @@ struct LiteConnectionService: LiteConnectionAccess {
       let records = current.records.filter { LiteIdentity.stableID($0.stableID) == id }
       guard records.count == 1, let record = records.first else {
         throw LiteRefusal("没有唯一的 Lite 恢复记录，已停止操作。")
+      }
+      guard record.requiresRediscovery != true else {
+        throw LiteRefusal("旧屏幕未接入，记录已保留。接好这台屏幕后刷新，不会使用旧编号控制其他屏幕。")
       }
       // A recycled runtime ID must never enable a different screen.
       guard !current.displays.contains(where: { $0.runtimeID == record.runtimeID }) else {
@@ -117,6 +149,7 @@ struct LiteConnectionService: LiteConnectionAccess {
         }
       }
     }
+    if state == .disconnected { try await ensureRecoveryProtection() }
     return try await controller.setState(state, for: .stableID(id))
   }
 

@@ -10,6 +10,7 @@ struct LiteDisplayRow: Identifiable {
   let isOnline: Bool
   let hasRecoveryRecord: Bool
   let refusal: String?
+  var requiresRediscovery = false
   var action: DisplayConnectionState { hasRecoveryRecord ? .connected : .disconnected }
 }
 
@@ -61,7 +62,7 @@ final class LiteModel: ObservableObject {
       isRefreshing = true
       do {
         let snapshot = try await access.snapshot()
-        pendingRecoveryCount = snapshot.records.count
+        pendingRecoveryCount = snapshot.pendingRecords.count
         let fresh = Self.rows(from: snapshot, unavailableReason: access.unavailableReason)
         for row in fresh where rowOrder[row.id] == nil { rowOrder[row.id] = rowOrder.count }
         rows = fresh.sorted { rowOrder[$0.id, default: 0] < rowOrder[$1.id, default: 0] }
@@ -122,7 +123,7 @@ final class LiteModel: ObservableObject {
     }
     await refreshRows()
     guard error == nil else { return false }
-    let targets = rows.filter(\.hasRecoveryRecord).map(\.id)
+    let targets = rows.filter { $0.hasRecoveryRecord && !$0.requiresRediscovery }.map(\.id)
     for id in targets {
       guard let row = rows.first(where: { $0.id == id }), row.hasRecoveryRecord else { continue }
       if let refusal = row.refusal {
@@ -151,18 +152,20 @@ final class LiteModel: ObservableObject {
                      name: display.name, isOnline: true, hasRecoveryRecord: hasRecord,
                      refusal: unavailableReason ?? LiteConnectionService.refusal(for: display, in: snapshot.displays,
                                                                                disconnecting: !hasRecord) ??
-                       (!hasRecord && !snapshot.records.isEmpty ? "请先恢复已有记录的外屏，再断开另一台。" : nil))
+                       (!hasRecord && !snapshot.pendingRecords.isEmpty ? "请先恢复已有记录的外屏，再断开另一台。" : nil))
     }
     for record in snapshot.records.sorted(by: { $0.disconnectedAt < $1.disconnectedAt }) {
       let id = LiteIdentity.stableID(record.stableID)
       if let id, snapshot.displays.contains(where: { LiteIdentity.stableID($0.stableID) == id }) { continue }
       let reused = snapshot.displays.contains { $0.runtimeID == record.runtimeID }
       let duplicate = id.map { value in snapshot.records.filter { LiteIdentity.stableID($0.stableID) == value }.count > 1 } ?? false
+      let historical = record.requiresRediscovery == true
       let refusal = unavailableReason ?? (id == nil || duplicate ? "恢复身份无效或重复，请核对目标。" :
+        historical ? "旧屏幕未接入，记录已保留。接好这台屏幕后刷新。" :
         reused ? "屏幕编号已被占用，暂不能安全重连。" : nil)
       rows.append(.init(id: id ?? "record:\(record.runtimeID)", stableID: id,
                         runtimeID: record.runtimeID, name: record.name, isOnline: false, hasRecoveryRecord: true,
-                        refusal: refusal))
+                        refusal: refusal, requiresRediscovery: historical))
     }
     // Keep ambiguous rows visible without duplicate SwiftUI identity.
     let counts = Dictionary(grouping: rows, by: \.id).mapValues(\.count)
@@ -171,7 +174,7 @@ final class LiteModel: ObservableObject {
       return LiteDisplayRow(id: "ambiguous:\(row.id):\(index)", stableID: row.stableID,
                             runtimeID: row.runtimeID, name: row.name, isOnline: row.isOnline,
                             hasRecoveryRecord: row.hasRecoveryRecord,
-                            refusal: "目标身份重复，暂不能安全操作。")
+                            refusal: "目标身份重复，暂不能安全操作。", requiresRediscovery: row.requiresRediscovery)
     }
   }
 

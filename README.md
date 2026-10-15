@@ -29,7 +29,7 @@ Lite is the current focused user-validation entry; Full continues maintenance. B
 
 ![Lite 0.1.0 real application preview; a saved record is not proof a display is online](Assets/Previews/DisplayDJLite-0.1.0.png)
 
-Lite requires verified restoration before normal quit. New disconnects use the application lifetime; upgrading keeps recovery records outside the bundle. Restore and quit before uninstalling. Physical-device rollback verification for the private connection entry point is still pending; see [recovery and uninstall instructions](docs/LITE-RECOVERY.md).
+Lite verifies restoration of current targets before normal quit. A recovery child process must be ready before a disconnect and restores applicable Lite targets after GUI termination. Ordinary reconnect, restore-and-quit and SIGKILL recovery passed on one Dell connection; the absent HP record is retained. Restore and quit before replacement or uninstall; see the [recovery instructions](docs/LITE-RECOVERY.md).
 
 DisplayDJ treats display connection as a control, not a cable chore. Disconnect one display and it disappears from the macOS desktop layout, so windows move to the displays that remain online. Reconnect it later from the menu bar or `display-cli`. This is different from dimming the panel or sending a DDC sleep command.
 

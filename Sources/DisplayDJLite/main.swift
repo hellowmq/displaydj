@@ -14,10 +14,12 @@ final class LiteApplication: NSObject, NSApplicationDelegate, NSPopoverDelegate 
   private var isCheckingQuit = false
   private var canTerminate = false
   private var isConfirmingConnection = false
+  private let guardian = LiteRecoveryGuardian()
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     isPreview = CommandLine.arguments.contains("--preview")
-    let access: any LiteConnectionAccess = isPreview ? LitePreviewAccess() : LiteConnectionService.live()
+    let access: any LiteConnectionAccess = isPreview ? LitePreviewAccess() : LiteConnectionService.live(
+      ensureRecoveryProtection: { [guardian] in try await guardian.ensureStarted() })
     let model = LiteModel(access: access)
     self.model = model
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -137,6 +139,16 @@ final class LiteApplication: NSObject, NSApplicationDelegate, NSPopoverDelegate 
     delayedRefresh?.cancel()
     topology.stop()
   }
+}
+
+// The same signed executable has a headless recovery mode. Enter it before
+// creating NSApplication, a menu item, topology callbacks or another guardian.
+if let index = CommandLine.arguments.firstIndex(of: "--recovery-guardian") {
+  guard CommandLine.arguments.indices.contains(index + 1),
+        let parent = Int32(CommandLine.arguments[index + 1]) else { exit(2) }
+  Task { @MainActor in exit(await LiteRecoveryGuardian.run(parentPID: parent)) }
+  RunLoop.main.run()
+  exit(2)
 }
 
 let app = NSApplication.shared

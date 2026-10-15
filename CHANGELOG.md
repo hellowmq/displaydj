@@ -3,6 +3,7 @@
 ## Unreleased — Lite 0.1.0 candidate and repository maintenance
 
 - Add a separate Lite app for external-display disconnect/reconnect, recovery records, safe refusal, inline failures and restore-before-quit choices.
+- Require an acknowledged recovery child process before disconnect; verify GUI-termination recovery on Dell. Preserve historical records when runtime IDs are reused without blocking the current screen.
 - Integrate the approved Lite icon and a compact native panel with explicit disconnect confirmation, stable target rows and keyboard refresh/quit.
 - Consolidate ZIP/DMG packaging into one implementation with product-specific identity/content verification; retain existing Full commands and optional DMG output.
 - Add shared maintenance/release standards, contribution and issue/PR templates, and an interaction contract based on the selected Full design.

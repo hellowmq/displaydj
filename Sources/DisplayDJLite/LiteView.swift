@@ -67,7 +67,7 @@ struct LiteView: View {
                 "断开后，窗口会移到其他在线屏幕；这不等于关闭显示器电源，也不会切换它的输入源。")
               Text(isPreview ? "关闭演示后，模拟数据会重置，不写入真实恢复记录。" : "退出前会恢复并确认外屏；失败会取消退出并保留记录。卸载或覆盖安装前请先恢复并退出。")
               if !isPreview {
-                Text("新断开仅在本应用运行期间生效。异常结束后仍无画面时，重新接线，在系统显示器设置中检测；必要时保存工作并重启 Mac。")
+                Text("断开前会启动退出恢复保护。主界面异常结束后，恢复子进程会尝试重新连接并结束；若仍无画面，请重新接线、在系统设置中检测，必要时重启 Mac。")
               }
               Text("内建屏、镜像屏及最后一块在线屏幕受到保护。")
               if !isPreview {
@@ -93,8 +93,10 @@ struct LiteView: View {
     guard model.hasLoaded else { return isPreview ? "正在载入模拟状态…" : "正在读取当前连接…" }
     if model.error != nil { return "连接状态暂未确认" }
     let online = model.rows.filter(\.isOnline).count
-    let offline = model.rows.count - online
-    return offline == 0 ? "\(online) 台外屏已连接" : "\(online) 台已连接 · \(offline) 台待恢复"
+    let offline = model.rows.filter { !$0.isOnline && !$0.requiresRediscovery }.count
+    let historical = model.rows.filter(\.requiresRediscovery).count
+    let current = offline == 0 ? "\(online) 台外屏已连接" : "\(online) 台已连接 · \(offline) 台待恢复"
+    return historical == 0 ? current : current + " · \(historical) 条未接入记录"
   }
 
   private var emptyMessage: String {
@@ -183,6 +185,7 @@ private struct LiteDisplayRowView: View {
 
   private var statusText: String {
     if pending { return row.action == .connected ? "正在恢复连接…" : "正在断开…" }
+    if row.requiresRediscovery { return "未接入 · 保留历史记录" }
     if row.hasRecoveryRecord && row.isOnline { return "已在线，待确认恢复" }
     if case .confirmed(let state) = model.feedback[row.id], (state == .connected) == row.isOnline {
       return state == .connected ? "已恢复连接" : "已断开，可恢复"
@@ -192,6 +195,7 @@ private struct LiteDisplayRowView: View {
 
   private var actionTitle: String {
     if pending { return "处理中" }
+    if row.requiresRediscovery { return "待接入" }
     if row.action == .connected {
       if row.isOnline { return "确认恢复" }
       return failure == nil ? "重新连接" : "重试连接"

@@ -6,17 +6,22 @@ public struct DisplayConnectionRecord: Codable, Equatable, Hashable, Sendable {
   public let stableID: String?
   public let name: String
   public let disconnectedAt: Date
+  /// The saved runtime ID was observed on another display or predates a boot.
+  /// Keep the record, but require online stable-identity discovery to use it.
+  public let requiresRediscovery: Bool?
 
   public init(
     runtimeID: UInt32,
     stableID: String?,
     name: String,
-    disconnectedAt: Date = Date()
+    disconnectedAt: Date = Date(),
+    requiresRediscovery: Bool? = nil
   ) {
     self.runtimeID = runtimeID
     self.stableID = stableID
     self.name = name
     self.disconnectedAt = disconnectedAt
+    self.requiresRediscovery = requiresRediscovery
   }
 }
 

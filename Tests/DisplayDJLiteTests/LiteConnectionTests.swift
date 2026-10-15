@@ -120,6 +120,80 @@ struct LiteConnectionTests {
     #expect(world.applied.map { $0.1 } == [false, true, false])
   }
 
+  @Test func reusedRecordIsPreservedAndCannotBlockOrControlReplacementScreen() async throws {
+    let old = DisplayConnectionRecord(runtimeID: 2, stableID: a, name: "Old")
+    let store = InMemoryDisplayConnectionRecordStore(records: [old])
+    let world = LiteWorld([builtIn, external(stableID: b)])
+    let access = service(world, store: store)
+    let model = LiteModel(access: access)
+    await model.refresh()
+    #expect(model.pendingRecoveryCount == 0)
+    #expect(model.rows.first { $0.stableID == a }?.requiresRediscovery == true)
+    #expect(model.rows.first { $0.stableID == b }?.refusal == nil)
+    await model.perform(model.rows.first { $0.stableID == b }!)
+    #expect(model.pendingRecoveryCount == 1)
+    #expect(try store.loadRecords().count == 2)
+    // A restart while the replacement screen is disabled must not reuse its
+    // now-unqueryable runtime ID for the old display.
+    let restarted = LiteModel(access: service(world, store: store))
+    await restarted.refresh()
+    await restarted.perform(restarted.rows.first { $0.stableID == a }!)
+    #expect(world.applied.count == 1)
+    #expect(await restarted.restoreForQuit())
+    #expect(world.applied.map { $0.1 } == [false, true])
+    #expect(try store.loadRecords().map(\.stableID) == [a])
+    #expect(try store.loadRecords().first?.requiresRediscovery == true)
+    #expect(restarted.rows.first { $0.stableID == b }?.isOnline == true)
+    // When the real old screen returns, its stable identity can retire its
+    // record without making a transaction against the replacement display.
+    world.replace([builtIn, external(3, stableID: a), external(stableID: b)], active: [1, 2, 3])
+    await restarted.refresh()
+    #expect(restarted.pendingRecoveryCount == 1)
+    #expect(await restarted.restoreForQuit())
+    #expect(try store.loadRecords().isEmpty)
+    #expect(world.applied.count == 2)
+  }
+
+  @Test func recoveryRecordSchemaReadsLegacyAndPersistsRediscoveryRequirement() throws {
+    let legacy = Data("[{\"runtimeID\":2,\"stableID\":\"\(a)\",\"name\":\"Old\",\"disconnectedAt\":0}]".utf8)
+    let records = try JSONDecoder().decode([DisplayConnectionRecord].self, from: legacy)
+    #expect(records.first?.requiresRediscovery == nil)
+    let marked = DisplayConnectionRecord(runtimeID: 2, stableID: a, name: "Old", requiresRediscovery: true)
+    #expect(try JSONDecoder().decode(DisplayConnectionRecord.self, from: JSONEncoder().encode(marked)) == marked)
+  }
+
+  @Test func missingGuardianReadinessPreventsRecordAndTransaction() async throws {
+    let world = LiteWorld([builtIn, external()])
+    let store = InMemoryDisplayConnectionRecordStore()
+    var access = service(world, store: store)
+    access.ensureRecoveryProtection = { throw LiteRefusal("guardian unavailable") }
+    do {
+      _ = try await access.change(.disconnected, stableID: a)
+      Issue.record("Disconnected without recovery protection")
+    } catch {}
+    #expect(world.applied.isEmpty)
+    #expect(try store.loadRecords().isEmpty)
+  }
+
+  @Test func guardianRestoresOnlyApplicableExactRecordsAndThenFinishes() async throws {
+    let world = LiteWorld([builtIn, external(stableID: b)], active: [1])
+    let store = InMemoryDisplayConnectionRecordStore(records: [
+      .init(runtimeID: 2, stableID: a, name: "Old", requiresRediscovery: true),
+      .init(runtimeID: 2, stableID: b, name: "Current")])
+    #expect(await LiteRecoveryGuardian.restoreAfterParentExit(access: service(world, store: store)))
+    #expect(world.applied.count == 1 && world.applied[0].0 == 2 && world.applied[0].1)
+    #expect(try store.loadRecords().map(\.stableID) == [a])
+  }
+
+  @Test func guardianFailureKeepsUnverifiedRecord() async throws {
+    let world = LiteWorld([builtIn, external()], active: [1])
+    world.configure(mutate: false)
+    let store = InMemoryDisplayConnectionRecordStore(records: [.init(runtimeID: 2, stableID: a, name: "Current")])
+    #expect(!(await LiteRecoveryGuardian.restoreAfterParentExit(access: service(world, store: store))))
+    #expect(try store.loadRecords().count == 1)
+    #expect(world.applied.count == 3)
+  }
+
   @Test func exactTargetAndRecoverySurviveModelRestart() async throws {
     let world = LiteWorld([builtIn, external(), external(3, stableID: b)])
     let store = InMemoryDisplayConnectionRecordStore()

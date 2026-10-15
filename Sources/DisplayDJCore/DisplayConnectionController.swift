@@ -143,7 +143,8 @@ public struct DisplayConnectionController: Sendable {
   /// The production controller, using live discovery and the private entry point.
   public static func live(
     store: any DisplayConnectionRecordStoring = FileDisplayConnectionRecordStore(),
-    disconnectionLifetime: DisplayDisconnectionLifetime = .loginSession
+    disconnectionLifetime: DisplayDisconnectionLifetime = .loginSession,
+    verificationAttempts: Int = 25
   ) throws -> DisplayConnectionController {
     DisplayConnectionController(
       discovery: CoreGraphicsDisplayDiscovery(),
@@ -151,7 +152,8 @@ public struct DisplayConnectionController: Sendable {
         resolver: ProcessDisplayConnectionSymbolResolver(),
         disconnectionLifetime: disconnectionLifetime
       ),
-      store: store
+      store: store,
+      verificationAttempts: verificationAttempts
     )
   }
 
@@ -341,6 +343,12 @@ public struct DisplayConnectionController: Sendable {
         )
       }
 
+      guard record.requiresRediscovery != true else {
+        throw DisplayDJError(code: .displayNotFound,
+          message: "The saved display must be rediscovered before reconnecting.",
+          operation: .write, displayID: stableID,
+          details: ["phase": "offline-resolution", "reason": "requires-rediscovery"])
+      }
       return record.runtimeID
 
     case .all, .builtIn, .external:
@@ -357,7 +365,7 @@ public struct DisplayConnectionController: Sendable {
 
   private func remember(_ display: DisplayDescriptor) throws {
     var records = try store.loadRecords()
-    records.removeAll { $0.runtimeID == display.runtimeID }
+    records.removeAll { Self.matches($0, runtimeID: display.runtimeID, stableID: display.stableID) }
     records.append(
       DisplayConnectionRecord(
         runtimeID: display.runtimeID,
@@ -387,12 +395,15 @@ public struct DisplayConnectionController: Sendable {
 
   private func forget(runtimeID: UInt32, stableID: String?) throws {
     var records = try store.loadRecords()
-    let normalized = stableID.flatMap(DisplayStableSelector.normalizeDescriptorID)
-    records.removeAll {
-      $0.runtimeID == runtimeID ||
-        (normalized != nil && $0.stableID.flatMap(DisplayStableSelector.normalizeDescriptorID) == normalized)
-    }
+    records.removeAll { Self.matches($0, runtimeID: runtimeID, stableID: stableID) }
     try store.saveRecords(records)
+  }
+
+  private static func matches(_ record: DisplayConnectionRecord, runtimeID: UInt32, stableID: String?) -> Bool {
+    let saved = record.stableID.flatMap(DisplayStableSelector.normalizeDescriptorID)
+    let current = stableID.flatMap(DisplayStableSelector.normalizeDescriptorID)
+    if let saved, let current { return saved == current }
+    return record.runtimeID == runtimeID
   }
 
   private static func notFound(_ selector: DisplaySelector) -> DisplayDJError {
