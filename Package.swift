@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .executable(name: "display-cli", targets: ["DisplayCLI"]),
         .executable(name: "DisplayDJBar", targets: ["DisplayDJBar"]),
+        .executable(name: "DisplayDJLite", targets: ["DisplayDJLite"]),
         .executable(name: "displaydj", targets: ["DisplayDJCLI"]),
         .library(name: "VibeDisplayCore", targets: ["VibeDisplayCore"]),
         .library(name: "VibeDisplayServer", targets: ["VibeDisplayServer"]),
@@ -26,10 +27,12 @@ let package = Package(
                           swiftSettings: [.swiftLanguageMode(.v5)]),
         .executableTarget(name: "DisplayDJCLI", dependencies: ["DisplayDJCore", "VibeDisplayCore", .product(name: "ArgumentParser", package: "swift-argument-parser")]),
         .executableTarget(name: "DisplayDJBar", dependencies: ["DisplayDJCore", "VibeDisplayCore"]),
+        .executableTarget(name: "DisplayDJLite", dependencies: ["DisplayDJCore"]),
         .testTarget(name: "DisplayDJCoreTests", dependencies: ["DisplayDJCore"]),
         .testTarget(name: "DisplayDJCLITests", dependencies: ["DisplayDJCLI", "DisplayDJCore"]),
         .testTarget(name: "DisplayCLITests", dependencies: ["DisplayCLI"]),
         .testTarget(name: "DisplayDJBarTests", dependencies: ["DisplayDJBar"]),
+        .testTarget(name: "DisplayDJLiteTests", dependencies: ["DisplayDJLite"]),
         .testTarget(name: "VibeDisplayCoreTests", dependencies: ["VibeDisplayCore"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(name: "VibeDisplayServerTests", dependencies: ["VibeDisplayServer"], swiftSettings: [.swiftLanguageMode(.v5)]),
     ]

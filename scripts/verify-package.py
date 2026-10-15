@@ -1,118 +1,103 @@
 #!/usr/bin/env python3
-"""Verify a packaged DisplayDJ ZIP against the exact local App build.
-
-This is an offline consistency check, not a notarization or install test.
-"""
-
+"""Compare a Full or Lite ZIP/DMG with the exact App used to build it, offline."""
 import argparse
 import hashlib
 import json
 import pathlib
 import plistlib
+import re
 import subprocess
 import sys
 import zipfile
 
-
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-APP_PREFIX = "DisplayDJ.app/"
-EXECUTABLES = ("DisplayDJBar", "display-cli", "displaydj")
+from product_config import PRODUCTS, ROOT, inspect_bundle, require, run
 
 
-def require(condition: bool, message: str) -> None:
-    if not condition:
-        raise ValueError(message)
+def files(app):
+    paths = list(app.rglob('*'))
+    require(not any(p.is_symlink() for p in paths), 'Unexpected symlink in product bundle')
+    return {p.relative_to(app).as_posix(): p for p in paths if p.is_file()}
 
 
-def run(*args: str) -> str:
-    result = subprocess.run(args, text=True, capture_output=True, check=False)
-    require(result.returncode == 0, f"{' '.join(args)} failed: {result.stderr.strip()}")
-    return result.stdout.strip()
+def compare_directory(archived, app):
+    source, target = files(app), files(archived)
+    require(source.keys() == target.keys(), 'DMG/App file lists differ')
+    for name, path in source.items():
+        require(target[name].read_bytes() == path.read_bytes(), f'DMG/App differs: {name}')
+    run('codesign', '--verify', '--deep', '--strict', str(archived))
 
 
-def verify(archive: pathlib.Path, app: pathlib.Path, expected_version: str,
-           allow_ad_hoc: bool) -> None:
-    require(archive.is_file(), f"ZIP not found: {archive}")
-    require(app.is_dir(), f"App not found: {app}")
-    require(expected_version and "/" not in expected_version, "invalid expected version")
-
-    cli = json.loads(run(str(app / "Contents/MacOS/display-cli"), "version", "--json"))
-    require(cli.get("ok") is True, "display-cli version did not succeed")
-    actual_version = cli["data"]["version"]
-    architecture = cli["data"]["architecture"]
-    require(actual_version == expected_version,
-            f"display-cli version {actual_version} != {expected_version}")
-    require(run(str(app / "Contents/MacOS/displaydj"), "--version") == expected_version,
-            "compatibility CLI version differs")
-
-    expected_name = f"displaydj-{expected_version}-macos-{architecture}.zip"
-    require(archive.name == expected_name,
-            f"ZIP filename {archive.name} != {expected_name}")
-
-    local_info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
-    for key in ("CFBundleShortVersionString", "CFBundleVersion"):
-        require(local_info.get(key) == expected_version,
-                f"App {key} {local_info.get(key)} != {expected_version}")
-    require(local_info.get("CFBundleIdentifier") == "io.github.hellowmq.displaydj",
-            "App bundle identifier differs")
-
-    with zipfile.ZipFile(archive) as package:
-        app_entries = [entry for entry in package.infolist()
-                       if entry.filename.startswith(APP_PREFIX) and not entry.is_dir()]
-        require(len(app_entries) == len({entry.filename for entry in app_entries}),
-                "duplicate App entries in ZIP")
-        members = {entry.filename: entry for entry in app_entries}
-        require(f"{APP_PREFIX}Contents/Info.plist" in members, "ZIP has no App Info.plist")
-        archived_info = plistlib.loads(package.read(f"{APP_PREFIX}Contents/Info.plist"))
-        require(archived_info == local_info, "ZIP App Info.plist differs from local App")
-
-        local_members = {APP_PREFIX + path.relative_to(app).as_posix(): path
-                         for path in app.rglob("*") if path.is_file()}
-        require(members.keys() == local_members.keys(),
-                f"ZIP/App file lists differ; missing={sorted(local_members.keys() - members.keys())}, "
-                f"extra={sorted(members.keys() - local_members.keys())}")
-        for name, path in local_members.items():
-            require(package.read(name) == path.read_bytes(), f"ZIP/App content differs: {name}")
-        for executable in EXECUTABLES:
-            require(f"{APP_PREFIX}Contents/MacOS/{executable}" in members,
-                    f"ZIP is missing {executable}")
-
-    sidecar = archive.with_name(archive.name + ".sha256")
-    require(sidecar.is_file(), f"SHA-256 sidecar not found: {sidecar}")
+def verify(archive, app, expected_version, allow_ad_hoc, product_key='full'):
+    product = PRODUCTS[product_key]
+    require(archive.is_file(), f'Package not found: {archive}')
+    require(bool(re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?', expected_version)),
+            'Expected version must be a semantic version')
+    info, architecture, signature = inspect_bundle(app, product, expected_version, allow_ad_hoc)
+    if product_key == 'full':
+        cli = json.loads(run(str(app / 'Contents/MacOS/display-cli'), 'version', '--json'))
+        require(cli.get('ok') is True and cli['data']['version'] == expected_version,
+                'display-cli version differs')
+        require(cli['data']['architecture'] == architecture, 'CLI architecture differs')
+        require(run(str(app / 'Contents/MacOS/displaydj'), '--version') == expected_version,
+                'Compatibility CLI version differs')
+    require(archive.suffix in ('.zip', '.dmg'), 'Expected ZIP or DMG')
+    expected_name = f'{product.prefix}-{expected_version}-macos-{architecture}{archive.suffix}'
+    require(archive.name == expected_name, f'Package filename {archive.name} != {expected_name}')
+    sidecar = archive.with_name(archive.name + '.sha256')
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-    require(sidecar.read_text().strip().split() == [digest, archive.name],
-            "SHA-256 sidecar does not match ZIP bytes and filename")
+    require(sidecar.is_file() and sidecar.read_text().strip().split() == [digest, archive.name],
+            'SHA-256 sidecar differs or is missing')
+    if archive.suffix == '.zip':
+        prefix = product.bundle + '/'
+        with zipfile.ZipFile(archive) as package:
+            entries = package.infolist()
+            require(all(e.filename.startswith((prefix, '__MACOSX/')) for e in entries),
+                    'ZIP contains content outside the selected product')
+            members = [e for e in entries if e.filename.startswith(prefix) and not e.is_dir()]
+            names = {e.filename for e in members}
+            require(len(names) == len(members), 'Duplicate App entries in ZIP')
+            local = {prefix + name: path for name, path in files(app).items()}
+            require(names == local.keys(), 'ZIP/App file lists differ')
+            for name, path in local.items():
+                require(package.read(name) == path.read_bytes(), f'ZIP/App differs: {name}')
+            for executable in product.executables:
+                entry = package.getinfo(prefix + 'Contents/MacOS/' + executable)
+                require((entry.external_attr >> 16) & 0o111, f'ZIP executable permissions missing: {executable}')
+            require(plistlib.loads(package.read(prefix + 'Contents/Info.plist')) == info,
+                    'ZIP App plist differs')
+    else:
+        mounted = plistlib.loads(subprocess.check_output(
+            ['hdiutil', 'attach', '-readonly', '-nobrowse', '-plist', str(archive)]))
+        mounts = [pathlib.Path(e['mount-point']) for e in mounted.get('system-entities', []) if 'mount-point' in e]
+        try:
+            require(len(mounts) == 1, 'Expected one mounted volume')
+            volume = mounts[0]
+            require({p.name for p in volume.glob('*.app')} == {product.bundle}, 'DMG has wrong product set')
+            compare_directory(volume / product.bundle, app)
+            inspect_bundle(volume / product.bundle, product, expected_version, allow_ad_hoc)
+        finally:
+            for volume in mounts:
+                subprocess.run(['hdiutil', 'detach', '-quiet', str(volume)], check=True)
+    print(f'Verified {archive.name}: {product_key}, {architecture}, {signature}, SHA-256 {digest}')
+    print('Notarization, Gatekeeper, first launch, upgrade and hardware use are separate checks.')
 
-    run("codesign", "--verify", "--deep", "--strict", str(app))
-    details = subprocess.run(("codesign", "-dv", "--verbose=4", str(app)),
-                             text=True, capture_output=True, check=False)
-    require(details.returncode == 0, f"codesign metadata failed: {details.stderr.strip()}")
-    signature = details.stderr + details.stdout
-    is_ad_hoc = "Signature=adhoc" in signature
-    require(allow_ad_hoc or not is_ad_hoc,
-            "App is ad-hoc signed; use --allow-ad-hoc only for a preview build")
-    require(is_ad_hoc or "Authority=Developer ID Application:" in signature,
-            "App signature is not Developer ID Application")
-    print(f"Verified {archive.name}: version {expected_version}, {architecture}, "
-          f"SHA-256 {digest}, {'ad-hoc' if is_ad_hoc else 'Developer ID'} signed")
-    print("Notarization, Gatekeeper, first launch, and upgrade are separate checks.")
 
-
-def main() -> int:
+def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("archive", type=pathlib.Path)
-    parser.add_argument("--app", type=pathlib.Path, default=ROOT / ".build/DisplayDJ.app")
-    parser.add_argument("--expect-version", required=True)
-    parser.add_argument("--allow-ad-hoc", action="store_true")
+    parser.add_argument('archive', type=pathlib.Path)
+    parser.add_argument('--product', choices=PRODUCTS, default='full')
+    parser.add_argument('--app', type=pathlib.Path)
+    parser.add_argument('--expect-version', required=True)
+    parser.add_argument('--allow-ad-hoc', action='store_true')
     args = parser.parse_args()
     try:
-        verify(args.archive.resolve(), args.app.resolve(), args.expect_version,
-               args.allow_ad_hoc)
-    except (ValueError, OSError, KeyError, zipfile.BadZipFile) as error:
-        print(f"Package verification failed: {error}", file=sys.stderr)
+        app = args.app or ROOT / '.build' / PRODUCTS[args.product].bundle
+        verify(args.archive.resolve(), app.resolve(), args.expect_version, args.allow_ad_hoc, args.product)
+    except (ValueError, OSError, KeyError, subprocess.CalledProcessError, zipfile.BadZipFile) as error:
+        print(f'Package verification failed: {error}', file=sys.stderr)
         return 1
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     sys.exit(main())

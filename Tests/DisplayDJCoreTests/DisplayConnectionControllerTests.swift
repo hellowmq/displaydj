@@ -146,6 +146,7 @@ private func makeController(
       thrownError: thrownError
     ),
     store: store,
+    ledger: DisplayConnectionIntentLedger(),
     verificationAttempts: 3,
     verificationDelay: .zero
   )

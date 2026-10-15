@@ -10,6 +10,19 @@ public protocol DisplayConfigurationTransactionApplying: Sendable {
   func setEnabled(_ enabled: Bool, forRuntimeID runtimeID: UInt32) throws
 }
 
+/// CLI changes outlive a one-shot process; a Lite disable must not.
+public enum DisplayDisconnectionLifetime: Sendable {
+  case application
+  case loginSession
+
+  var configurationOption: CGConfigureOption {
+    switch self {
+    case .application: .forAppOnly
+    case .loginSession: .forSession
+    }
+  }
+}
+
 /// The production transaction: a public CoreGraphics transaction wrapping one
 /// private `CGSConfigureDisplayEnabled` call.
 ///
@@ -19,11 +32,15 @@ public struct CGSConnectionTransaction: DisplayConfigurationTransactionApplying 
   private typealias ConfigureDisplayEnabled =
     @convention(c) (OpaquePointer?, UInt32, Bool) -> Int32
 
-  private let configure: ConfigureDisplayEnabled
+  private let configure: (CGDisplayConfigRef?, UInt32, Bool) -> Int32
+  private let begin: (inout CGDisplayConfigRef?) -> CGError
+  private let complete: (CGDisplayConfigRef?, CGConfigureOption) -> CGError
+  private let disconnectionLifetime: DisplayDisconnectionLifetime
 
   /// - Throws: A `.unsupported` error when the private entry point is missing.
   ///   An unavailable symbol is a hard failure, never a silently skipped call.
-  public init(resolver: any DisplayConnectionSymbolResolving) throws {
+  public init(resolver: any DisplayConnectionSymbolResolving,
+              disconnectionLifetime: DisplayDisconnectionLifetime = .loginSession) throws {
     guard let raw = resolver.resolve(.configureDisplayEnabled) else {
       throw DisplayDJError(
         code: .unsupported,
@@ -39,12 +56,27 @@ public struct CGSConnectionTransaction: DisplayConfigurationTransactionApplying 
       )
     }
 
-    configure = unsafeBitCast(raw, to: ConfigureDisplayEnabled.self)
+    let function = unsafeBitCast(raw, to: ConfigureDisplayEnabled.self)
+    self.init(disconnectionLifetime: disconnectionLifetime,
+              begin: { CGBeginDisplayConfiguration(&$0) },
+              configure: { function($0, $1, $2) },
+              complete: { CGCompleteDisplayConfiguration($0, $1) })
+  }
+
+  // Inject the complete transaction boundary for tests; no real display calls.
+  init(disconnectionLifetime: DisplayDisconnectionLifetime,
+       begin: @escaping (inout CGDisplayConfigRef?) -> CGError,
+       configure: @escaping (CGDisplayConfigRef?, UInt32, Bool) -> Int32,
+       complete: @escaping (CGDisplayConfigRef?, CGConfigureOption) -> CGError) {
+    self.disconnectionLifetime = disconnectionLifetime
+    self.begin = begin
+    self.configure = configure
+    self.complete = complete
   }
 
   public func setEnabled(_ enabled: Bool, forRuntimeID runtimeID: UInt32) throws {
     var config: CGDisplayConfigRef?
-    let beginStatus = CGBeginDisplayConfiguration(&config)
+    let beginStatus = begin(&config)
 
     guard beginStatus == .success else {
       throw Self.error(
@@ -68,7 +100,9 @@ public struct CGSConnectionTransaction: DisplayConfigurationTransactionApplying 
     }
 
     let callStatus = configure(config, runtimeID, enabled)
-    let completeStatus = CGCompleteDisplayConfiguration(config, .forSession)
+    // Reconnect is committed to the login session, so restoring an old Lite
+    // session-scoped disable does not revert to that disabled baseline on exit.
+    let completeStatus = complete(config, enabled ? .forSession : disconnectionLifetime.configurationOption)
 
     guard callStatus == 0 else {
       throw Self.error(

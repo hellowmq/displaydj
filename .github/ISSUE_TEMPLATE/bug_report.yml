@@ -1,0 +1,38 @@
+name: Bug report / 问题反馈
+description: Report Full or Lite behavior with installation and recovery details.
+body:
+  - type: dropdown
+    id: product
+    attributes:
+      label: Product / 产品
+      options:
+        - DisplayDJ Full
+        - DisplayDJ Lite
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version and source / 版本与来源
+      placeholder: 'For example: Lite 0.1.0, local build or exact Release tag'
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment / 环境
+      description: 'macOS, Mac architecture, display model and cable/dock. Omit UUIDs and serial numbers.'
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Steps, expected result, actual result / 步骤与结果
+      description: 'Include the exact error text. Remove tokens, private contacts and device identities from logs.'
+    validations:
+      required: true
+  - type: textarea
+    id: recovery
+    attributes:
+      label: Recovery status / 恢复情况
+      description: 'Did the display reconnect? Is the recovery entry still available? Do not delete recovery records.'

@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1300" viewBox="0 0 1600 1300" role="img" aria-labelledby="title desc">
+  <title id="title">DisplayDJ product lines and commercial validation priorities</title>
+  <desc id="desc">Full stays in maintenance while Lite is the current validation focus. They share a connection core but version independently. The proposed user experiment covers discovery, installation, verified disconnect and restore, repeated use, and purchase conditions; it has not yet been run.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1600" y2="1300" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#101923"/><stop offset="1" stop-color="#080E16"/>
+    </linearGradient>
+    <linearGradient id="full" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#123447"/><stop offset="1" stop-color="#142430"/>
+    </linearGradient>
+    <linearGradient id="lite" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#173B39"/><stop offset="1" stop-color="#182B2D"/>
+    </linearGradient>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
+      .title { fill: #F4F7FA; font-size: 46px; font-weight: 700; }
+      .subtitle { fill: #9EABB8; font-size: 21px; }
+      .section { fill: #F2F6F8; font-size: 28px; font-weight: 650; }
+      .body { fill: #D1D9E0; font-size: 21px; }
+      .small { fill: #91A0AE; font-size: 17px; }
+      .tag { font-size: 16px; font-weight: 700; letter-spacing: 1.2px; }
+    </style>
+  </defs>
+  <rect width="1600" height="1300" rx="38" fill="url(#bg)"/>
+  <text class="title" x="88" y="103">DisplayDJ · 一个方向，两种交付</text>
+  <text class="subtitle" x="90" y="145">当前主张：无需拔线，让一台外屏退出 Mac 桌面，并在需要时可靠恢复</text>
+  <rect x="1234" y="72" width="278" height="42" rx="21" fill="#202E39"/>
+  <text class="tag" x="1373" y="99" text-anchor="middle" fill="#B9C7D2">定位与规划 · 2026-10-15</text>
+
+  <rect x="420" y="188" width="760" height="188" rx="28" fill="#182530" stroke="#344552" stroke-width="2"/>
+  <text class="tag" x="800" y="228" text-anchor="middle" fill="#8EA2B2">SHARED ENGINE · 已存在</text>
+  <text class="section" x="800" y="274" text-anchor="middle">DisplayDJCore</text>
+  <text class="body" x="800" y="314" text-anchor="middle">稳定屏幕身份 · 安全断开/恢复事务 · 拓扑核验 · 连接意图</text>
+  <text class="small" x="800" y="347" text-anchor="middle">Lite 复用连接能力；完整版保留显示控制与服务能力</text>
+
+  <path d="M800 376V414H430V448M800 414H1170V448" fill="none" stroke="#647582" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="800" cy="414" r="7" fill="#A9B7C2"/>
+
+  <rect x="88" y="448" width="686" height="385" rx="30" fill="url(#full)" stroke="#2B718B" stroke-width="2"/>
+  <rect x="124" y="482" width="204" height="32" rx="16" fill="#1C5269"/>
+  <text class="tag" x="226" y="504" text-anchor="middle" fill="#83E6FF">FULL · 维护与按需修复</text>
+  <g transform="translate(124 531) scale(0.055)">
+    <rect width="1024" height="1024" rx="226" fill="#0A0F18"/>
+    <path d="M704 296V270C704 224 666 186 620 186H392C300 186 226 260 226 352V672C226 764 300 838 392 838H620C666 838 704 800 704 754V728M410 512H704" fill="none" stroke="#55D9FF" stroke-width="82" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text class="section" x="200" y="568">DisplayDJ 完整版</text>
+  <text class="body" x="124" y="604">完整显示控制：亮度 / DDC / Gamma / 模式 / 预设</text>
+  <text class="body" x="124" y="641">快捷键、菜单栏 App、CLI 与可选本地服务</text>
+  <path d="M124 677H738" stroke="#31566A" stroke-width="1.5"/>
+  <text class="small" x="124" y="713">App ID</text><text class="body" x="253" y="713">io.github.hellowmq.displaydj</text>
+  <text class="small" x="124" y="751">当前版本</text><text class="body" x="253" y="751">1.0.2 · 已发布</text>
+  <text class="small" x="124" y="790">现有产物</text><text class="body" x="253" y="790">DisplayDJ.app + CLI · ZIP / DMG</text>
+
+  <rect x="826" y="448" width="686" height="385" rx="30" fill="url(#lite)" stroke="#53B99D" stroke-width="3"/>
+  <rect x="862" y="482" width="204" height="32" rx="16" fill="#245E55"/>
+  <text class="tag" x="964" y="504" text-anchor="middle" fill="#9AF2D5">LITE · 当前验证重点</text>
+  <g transform="translate(862 531) scale(0.055)">
+    <rect width="1024" height="1024" rx="226" fill="#0A0F18"/>
+    <path d="M704 296V270C704 224 666 186 620 186H392C300 186 226 260 226 352V672C226 764 300 838 392 838H620C666 838 704 800 704 754V728" fill="none" stroke="#55D9FF" stroke-width="82" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="704" cy="512" r="42" fill="#55D9FF"/>
+  </g>
+  <text class="section" x="938" y="568">DisplayDJ Lite</text>
+  <text class="body" x="862" y="604">只做单台外接显示器断开与恢复</text>
+  <text class="body" x="862" y="641">独立轻量 UI · 独立恢复记录 · 不带 CLI / daemon</text>
+  <path d="M862 677H1476" stroke="#365B55" stroke-width="1.5"/>
+  <text class="small" x="862" y="713">App ID</text><text class="body" x="991" y="713">io.github.hellowmq.displaydj.lite</text>
+  <text class="small" x="862" y="751">当前版本</text><text class="body" x="991" y="751">0.1.0 · 本地原型</text>
+  <text class="small" x="862" y="790">本地候选包</text><text class="body" x="991" y="790">DisplayDJLite.app · ZIP / DMG</text>
+
+  <rect x="88" y="870" width="1424" height="126" rx="26" fill="#141E28" stroke="#33424E" stroke-width="2"/>
+  <text class="tag" x="124" y="906" fill="#A8B8C5">VERSION &amp; DELIVERY · 版本独立递增，首轮只补必要交付</text>
+  <text class="body" x="124" y="944">Full 保持 1.0.2，Lite 保持 0.1.0；每条线内部的版本、tag、安装包和发布说明必须一致。</text>
+  <text class="small" x="124" y="975">保留 Full 的 v… 标签；Lite 用 lite-v…；已本地实现共用打包与独立校验，自动上传与更新服务后置。</text>
+
+  <rect x="88" y="1024" width="1424" height="218" rx="26" fill="#141E28" stroke="#33424E" stroke-width="2"/>
+  <text class="tag" x="124" y="1061" fill="#9AF2D5">BUSINESS VALIDATION · 目标流程，尚待外部验证</text>
+  <g fill="#20332F" stroke="#3F6A5E" stroke-width="1.5">
+    <rect x="124" y="1084" width="248" height="57" rx="13"/>
+    <rect x="400" y="1084" width="248" height="57" rx="13"/>
+    <rect x="676" y="1084" width="248" height="57" rx="13"/>
+    <rect x="952" y="1084" width="248" height="57" rx="13"/>
+    <rect x="1228" y="1084" width="248" height="57" rx="13"/>
+  </g>
+  <g class="body" text-anchor="middle">
+    <text x="248" y="1120">看到主张</text><text x="524" y="1120">安装并打开</text>
+    <text x="800" y="1120">断开并确认恢复</text><text x="1076" y="1120">真实场景再次使用</text>
+    <text x="1352" y="1120">具体购买条件</text>
+  </g>
+  <g stroke="#6A8D80" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M379 1112H393M389 1108L393 1112L389 1116"/>
+    <path d="M655 1112H669M665 1108L669 1112L665 1116"/>
+    <path d="M931 1112H945M941 1108L945 1112L941 1116"/>
+    <path d="M1207 1112H1221M1217 1108L1221 1112L1217 1116"/>
+  </g>
+  <text class="small" x="124" y="1180">先完成试用包与已知设备恢复验收，再看渠道和设备条件开展小范围外部试用；点击、安装、复用、付款分别记录。</text>
+  <text class="small" x="124" y="1211">Lite 是当前验证入口；收费方式尚未确定。两条产品线不等于同时推进两个增长项目，也不预设 Lite 免费 / Full 付费。</text>
+</svg>

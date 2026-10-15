@@ -21,3 +21,12 @@ jobs:
         run: python3 scripts/smoke.py
       - name: Build application bundle
         run: bash scripts/build-app.sh
+      - name: Build Lite application bundle
+        run: bash scripts/build-lite-app.sh
+      - name: Check Lite bundle identity and resources
+        run: python3 scripts/smoke-lite.py
+      - name: Check packaging script arguments
+        run: |
+          bash -n scripts/package.sh scripts/package-dmg.sh scripts/build-lite-app.sh
+          python3 scripts/package-product.py --help
+          python3 scripts/verify-package.py --help

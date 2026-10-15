@@ -142,12 +142,14 @@ public struct DisplayConnectionController: Sendable {
 
   /// The production controller, using live discovery and the private entry point.
   public static func live(
-    store: any DisplayConnectionRecordStoring = FileDisplayConnectionRecordStore()
+    store: any DisplayConnectionRecordStoring = FileDisplayConnectionRecordStore(),
+    disconnectionLifetime: DisplayDisconnectionLifetime = .loginSession
   ) throws -> DisplayConnectionController {
     DisplayConnectionController(
       discovery: CoreGraphicsDisplayDiscovery(),
       transaction: try CGSConnectionTransaction(
-        resolver: ProcessDisplayConnectionSymbolResolver()
+        resolver: ProcessDisplayConnectionSymbolResolver(),
+        disconnectionLifetime: disconnectionLifetime
       ),
       store: store
     )

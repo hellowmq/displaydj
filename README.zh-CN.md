@@ -12,9 +12,24 @@
 
 `macOS 13+ target` · `Swift 6` · `Apple Silicon DDC/CI` · `MIT`
 
-[下载最新版本](https://github.com/hellowmq/displaydj/releases/latest) · [快速开始](#快速开始) · [CLI / HTTP 参考](docs/API.md)
+[下载完整版 1.0.2](https://github.com/hellowmq/displaydj/releases/tag/v1.0.2) · [快速开始](#快速开始) · [CLI / HTTP 参考](docs/API.md)
 
 </div>
+
+## 两种交付形态
+
+| 产品 | 范围 | 状态 |
+| --- | --- | --- |
+| **DisplayDJ 完整版** | 亮度、显示设置、连接控制、CLI 与可选本地服务 | [下载 1.0.2](https://github.com/hellowmq/displaydj/releases/tag/v1.0.2) |
+| **DisplayDJ Lite** | 单台外屏断开、重新连接和恢复记录 | 本地 0.1.0 候选，尚未发布；[构建与验证记录](docs/DISPLAYDJ-LITE.md) |
+
+Lite 是当前聚焦的用户验证入口，完整版继续维护。两者共享连接内核，App 身份、恢复数据和版本独立。参见[维护与发布标准](docs/MAINTENANCE.md)、[贡献说明](CONTRIBUTING.md)和[交互一致性契约](docs/INTERACTION-CONTRACT.md)。
+
+<p align="center"><img src="Assets/DisplayDJLiteIcon.png" alt="DisplayDJ Lite 图标" width="96"></p>
+
+![Lite 0.1.0 真实运行预览，保存记录不代表设备当前在线](Assets/Previews/DisplayDJLite-0.1.0.png)
+
+Lite 正常退出须先确认恢复；新断开仅在本应用生命周期内生效。覆盖安装不会删除恢复记录，卸载前请先恢复并退出。私有连接接口的实机回收验收仍待补全，见[恢复与卸载说明](docs/LITE-RECOVERY.md)。
 
 DisplayDJ 把“连接状态”也变成显示器控制的一部分，而不只是让你去拔线。主动断开一台显示器后，它会从 macOS 桌面布局中消失，窗口移到仍在线的屏幕；需要时再从菜单栏或 `display-cli` 重新连接。这不同于把屏幕调暗或发送 DDC 休眠命令。
 
@@ -47,7 +62,7 @@ DisplayDJ 把“连接状态”也变成显示器控制的一部分，而不只�
 
 ### 下载 App
 
-从 [最新发布](https://github.com/hellowmq/displaydj/releases/latest) 下载 arm64 ZIP 或 DMG。安装包同时包含 `DisplayDJ.app`、独立的 `display-cli` 和兼容旧脚本的 `displaydj` 命令。
+从 [完整版 1.0.2](https://github.com/hellowmq/displaydj/releases/tag/v1.0.2) 下载 arm64 ZIP 或 DMG。安装包同时包含 `DisplayDJ.app`、独立的 `display-cli` 和兼容旧脚本的 `displaydj` 命令。
 
 当前下载包仅支持 Apple Silicon，采用 ad-hoc 签名，尚未经过 Developer ID 签名和 Apple 公证，因此 macOS 可能阻止首次启动。可在 Finder 中按住 Control 点击 DisplayDJ 并选择“打开”，或前往“系统设置 → 隐私与安全性”允许打开。全局快捷键和可选亮度媒体键需要辅助功能权限。覆盖 ad-hoc 签名 App 后若全局按键失效，请移除旧授权条目，再添加准确的 `/Applications/DisplayDJ.app`；若系统要求输入监控，也请允许，完成后退出并重新打开 DisplayDJ。完整安装说明与兼容边界见[发布说明](docs/RELEASE-NOTES-1.0.2.md)。
 

@@ -12,9 +12,24 @@ A macOS menu bar app and standalone CLI for hands-on display control and automat
 
 `macOS 13+ target` · `Swift 6` · `Apple Silicon DDC/CI` · `MIT`
 
-[Download latest release](https://github.com/hellowmq/displaydj/releases/latest) · [Quick start](#quick-start) · [CLI / HTTP reference](docs/API.md)
+[Download Full 1.0.2](https://github.com/hellowmq/displaydj/releases/tag/v1.0.2) · [Quick start](#quick-start) · [CLI / HTTP reference](docs/API.md)
 
 </div>
+
+## Product lines
+
+| Product | Scope | Status |
+| --- | --- | --- |
+| **DisplayDJ Full** | Brightness, display settings, connections, CLI and optional local service | [1.0.2 download](https://github.com/hellowmq/displaydj/releases/tag/v1.0.2) |
+| **DisplayDJ Lite** | One external-display disconnect/reconnect workflow with saved recovery | Local 0.1.0 candidate; not published. [Build and validation notes](docs/DISPLAYDJ-LITE.md) |
+
+Lite is the current focused user-validation entry; Full continues maintenance. Both share the connection core but keep separate App identities, recovery data and versions. See [maintenance/release standards](docs/MAINTENANCE.md), [contributing](CONTRIBUTING.md) and the [interaction contract](docs/INTERACTION-CONTRACT.md).
+
+<p align="center"><img src="Assets/DisplayDJLiteIcon.png" alt="DisplayDJ Lite icon" width="96"></p>
+
+![Lite 0.1.0 real application preview; a saved record is not proof a display is online](Assets/Previews/DisplayDJLite-0.1.0.png)
+
+Lite requires verified restoration before normal quit. New disconnects use the application lifetime; upgrading keeps recovery records outside the bundle. Restore and quit before uninstalling. Physical-device rollback verification for the private connection entry point is still pending; see [recovery and uninstall instructions](docs/LITE-RECOVERY.md).
 
 DisplayDJ treats display connection as a control, not a cable chore. Disconnect one display and it disappears from the macOS desktop layout, so windows move to the displays that remain online. Reconnect it later from the menu bar or `display-cli`. This is different from dimming the panel or sending a DDC sleep command.
 
@@ -47,7 +62,7 @@ The `displaydj` compatibility command is also retained, so existing `get brightn
 
 ### Download the app
 
-Download the arm64 ZIP or DMG from the [latest release](https://github.com/hellowmq/displaydj/releases/latest). The bundle includes `DisplayDJ.app`, the standalone `display-cli`, and the legacy-compatible `displaydj` command.
+Download the arm64 ZIP or DMG from the [Full 1.0.2 release](https://github.com/hellowmq/displaydj/releases/tag/v1.0.2). The bundle includes `DisplayDJ.app`, the standalone `display-cli`, and the legacy-compatible `displaydj` command.
 
 The current downloads are for Apple Silicon only. They use ad-hoc signing and are not Developer ID signed or Apple-notarized, so macOS may block the first launch. Control-click DisplayDJ in Finder and choose **Open**, or allow it in **System Settings → Privacy & Security**. Global shortcuts and optional brightness media keys require Accessibility permission. After replacing an ad-hoc-signed app, remove the old DisplayDJ permission entry and re-add `/Applications/DisplayDJ.app` if global keys stop working; grant Input Monitoring if requested, then quit and reopen DisplayDJ. See the [release notes](docs/RELEASE-NOTES-1.0.2.md) for the complete installation and compatibility notes.
 

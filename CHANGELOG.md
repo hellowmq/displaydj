@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — Lite 0.1.0 candidate and repository maintenance
+
+- Add a separate Lite app for external-display disconnect/reconnect, recovery records, safe refusal, inline failures and restore-before-quit choices.
+- Integrate the approved Lite icon and a compact native panel with explicit disconnect confirmation, stable target rows and keyboard refresh/quit.
+- Consolidate ZIP/DMG packaging into one implementation with product-specific identity/content verification; retain existing Full commands and optional DMG output.
+- Add shared maintenance/release standards, contribution and issue/PR templates, and an interaction contract based on the selected Full design.
+- Full remains 1.0.2. Its selected interaction redesign is still pending implementation. No new public release is implied by this section.
+
 ## 1.0.2 — 2026-10-12
 
 - 新增独立亮度媒体键开关、选中屏／鼠标所在屏目标及逐屏亮度指示器。

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">DisplayDJ Lite icon concept, version 2</title>
+  <desc id="desc">The original open cyan display-control frame, simplified to a single connection point in the opening.</desc>
+  <defs>
+    <linearGradient id="canvas" x1="120" y1="72" x2="904" y2="952" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111821"/>
+      <stop offset="1" stop-color="#0A0F18"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="226" fill="url(#canvas)"/>
+  <path d="M704 296V270C704 224 666 186 620 186H392C300 186 226 260 226 352V672C226 764 300 838 392 838H620C666 838 704 800 704 754V728" fill="none" stroke="#55D9FF" stroke-width="82" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="704" cy="512" r="42" fill="#55D9FF"/>
+</svg>
