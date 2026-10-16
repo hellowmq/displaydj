@@ -1,13 +1,13 @@
 # Changelog
 
-## Unreleased — Lite 0.1.0 candidate and repository maintenance
+## Lite 0.1.0 — 2026-10-16 (Prerelease)
 
 - Add a separate Lite app for external-display disconnect/reconnect, recovery records, safe refusal, inline failures and restore-before-quit choices.
 - Require an acknowledged recovery child process before disconnect; verify GUI-termination recovery on Dell. Preserve historical records when runtime IDs are reused without blocking the current screen.
 - Integrate the approved Lite icon and a compact native panel with explicit disconnect confirmation, stable target rows and keyboard refresh/quit.
 - Consolidate ZIP/DMG packaging into one implementation with product-specific identity/content verification; retain existing Full commands and optional DMG output.
 - Add shared maintenance/release standards, contribution and issue/PR templates, and an interaction contract based on the selected Full design.
-- Full remains 1.0.2. Its selected interaction redesign is still pending implementation. No new public release is implied by this section.
+- Full remains 1.0.2. Its selected interaction redesign is still pending implementation. Lite is published separately as the `lite-v0.1.0` prerelease; Full remains the latest stable release.
 
 ## 1.0.2 — 2026-10-12
 

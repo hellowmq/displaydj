@@ -12,7 +12,7 @@
 
 `macOS 13+ target` · `Swift 6` · `Apple Silicon DDC/CI` · `MIT`
 
-[下载完整版 1.0.2](https://github.com/hellowmq/displaydj/releases/tag/v1.0.2) · [快速开始](#快速开始) · [CLI / HTTP 参考](docs/API.md)
+[下载完整版 1.0.2](https://github.com/hellowmq/displaydj/releases/tag/v1.0.2) · [Lite 0.1.0 预发布](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.1.0) · [快速开始](#快速开始) · [CLI / HTTP 参考](docs/API.md)
 
 </div>
 
@@ -21,7 +21,7 @@
 | 产品 | 范围 | 状态 |
 | --- | --- | --- |
 | **DisplayDJ 完整版** | 亮度、显示设置、连接控制、CLI 与可选本地服务 | [下载 1.0.2](https://github.com/hellowmq/displaydj/releases/tag/v1.0.2) |
-| **DisplayDJ Lite** | 单台外屏断开、重新连接和恢复记录 | 本地 0.1.0 候选，尚未发布；[构建与验证记录](docs/DISPLAYDJ-LITE.md) |
+| **DisplayDJ Lite** | 单台外屏断开、重新连接和恢复记录 | [下载 0.1.0 预发布版](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.1.0) · [验证记录](docs/DISPLAYDJ-LITE.md) |
 
 Lite 是当前聚焦的用户验证入口，完整版继续维护。两者共享连接内核，App 身份、恢复数据和版本独立。参见[维护与发布标准](docs/MAINTENANCE.md)、[贡献说明](CONTRIBUTING.md)和[交互一致性契约](docs/INTERACTION-CONTRACT.md)。
 

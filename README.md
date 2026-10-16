@@ -12,7 +12,7 @@ A macOS menu bar app and standalone CLI for hands-on display control and automat
 
 `macOS 13+ target` · `Swift 6` · `Apple Silicon DDC/CI` · `MIT`
 
-[Download Full 1.0.2](https://github.com/hellowmq/displaydj/releases/tag/v1.0.2) · [Quick start](#quick-start) · [CLI / HTTP reference](docs/API.md)
+[Download Full 1.0.2](https://github.com/hellowmq/displaydj/releases/tag/v1.0.2) · [Lite 0.1.0 prerelease](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.1.0) · [Quick start](#quick-start) · [CLI / HTTP reference](docs/API.md)
 
 </div>
 
@@ -21,7 +21,7 @@ A macOS menu bar app and standalone CLI for hands-on display control and automat
 | Product | Scope | Status |
 | --- | --- | --- |
 | **DisplayDJ Full** | Brightness, display settings, connections, CLI and optional local service | [1.0.2 download](https://github.com/hellowmq/displaydj/releases/tag/v1.0.2) |
-| **DisplayDJ Lite** | One external-display disconnect/reconnect workflow with saved recovery | Local 0.1.0 candidate; not published. [Build and validation notes](docs/DISPLAYDJ-LITE.md) |
+| **DisplayDJ Lite** | One external-display disconnect/reconnect workflow with saved recovery | [0.1.0 prerelease download](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.1.0) · [Validation notes](docs/DISPLAYDJ-LITE.md) |
 
 Lite is the current focused user-validation entry; Full continues maintenance. Both share the connection core but keep separate App identities, recovery data and versions. See [maintenance/release standards](docs/MAINTENANCE.md), [contributing](CONTRIBUTING.md) and the [interaction contract](docs/INTERACTION-CONTRACT.md).
 
