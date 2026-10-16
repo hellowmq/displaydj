@@ -21,6 +21,7 @@ Publication requires a fixed source commit/tag, package checks, the maintenance 
 - Native quit offers only restore-and-quit or cancel. Escape cancellation leaves the process and recovery entry available.
 - Physical verification on Apple M1/macOS 27.0.1 and Dell D2720DS passed: ordinary reconnect, restore-and-quit, and guardian recovery after SIGKILL of the GUI (~7.3 seconds). The guardian then exited, Dell's record cleared, and the absent HP historical record remained.
 - The earlier scope-only SIGKILL attempt failed; the display was explicitly recovered before adding the guardian. See [device evidence and limits](LITE-DEVICE-VERIFICATION.md).
-- **Still a draft:** not published. HP physical recovery, visual quality after reconnect, minimum-OS execution, clean first install and wider device compatibility remain unverified. Simultaneous termination of the GUI and guardian is not covered.
+- The user confirmed Dell had a normal picture after testing. The MacBook was then taken away; Dell going offline after that is an expected physical disconnection, not a failed software recovery.
+- **Still a draft:** not published. HP physical recovery, a full picture-quality assessment, minimum-OS execution, clean first install and wider device compatibility remain unverified. Simultaneous termination of the GUI and guardian is not covered.
 
 远端应用仓库原来只有 Full 图标，本次新增 Lite 图标与真实安装实例截图；网站上原有 Full 1.0.2 设置预览仍对应完整版，未被 Lite 图片覆盖。图片维护清单见 [PREVIEW-ASSETS.md](PREVIEW-ASSETS.md)。
