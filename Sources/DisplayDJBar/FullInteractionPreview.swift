@@ -11,12 +11,21 @@ final class FullInteractionPreview: DisplayDiscovering, DisplayConfigurationTran
   let transport = BrightnessTransport.displayServices
 
   init(count: Int = 6) {
-    panels = (1...max(1, count)).map { index in
-      DisplayDescriptor(runtimeID: UInt32(index),
-        stableID: String(format: "uuid:aaaaaaaa-aaaa-aaaa-aaaa-%012d", index),
-        name: index == 1 ? "示例内建屏（模拟）" : index == 2 ? "工作屏（模拟）" : "长名称外接显示器 \(index)（模拟）",
+    var configuredPanels: [DisplayDescriptor] = []
+    for index in 1...max(1, count) {
+      let runtimeID = UInt32(index)
+      let stableID = String(format: "uuid:aaaaaaaa-aaaa-aaaa-aaaa-%012d", index)
+      let name: String
+      switch index {
+      case 1: name = "示例内建屏（模拟）"
+      case 2: name = "工作屏（模拟）"
+      default: name = "长名称外接显示器 \(index)（模拟）"
+      }
+      let panel = DisplayDescriptor(runtimeID: runtimeID, stableID: stableID, name: name,
         isBuiltIn: index == 1, isVirtual: false, isMirrored: false)
+      configuredPanels.append(panel)
     }
+    panels = configuredPanels
     online = Set(panels.map(\.runtimeID))
   }
   func discoverDisplays() async throws -> [DisplayDescriptor] { snapshot() }
