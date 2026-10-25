@@ -25,9 +25,11 @@ A macOS menu bar app and standalone CLI for hands-on display control and automat
 
 Choose Lite for basic brightness and display connections, or Full for display settings, automation and the CLI. Both keep separate App identities, recovery data and versions. See [maintenance/release standards](docs/MAINTENANCE.md), [contributing](CONTRIBUTING.md) and the [interaction contract](docs/INTERACTION-CONTRACT.md).
 
-<p align="center"><img src="Assets/DisplayDJLiteIcon.png" alt="DisplayDJ Lite icon" width="96"></p>
+| DisplayDJ Full 1.0.2 | DisplayDJ Lite 0.1.0 (Prerelease) |
+| :---: | :---: |
+| <img src="Assets/Previews/DisplayDJ-1.0.2-2026-10-25.jpg" alt="Full 1.0.2: real built-in brightness control" width="320"> | <img src="Assets/Previews/DisplayDJLite-0.1.0-2026-10-25.jpg" alt="Lite 0.1.0: real built-in brightness and an offline historical record" width="320"> |
 
-![Lite 0.1.0 refreshed build: real built-in brightness control and an offline historical record](Assets/Previews/DisplayDJLite-0.1.0-2026-10-25.jpg)
+Real application windows from the 2026-10-25 build. These screenshots show the built-in display on this Mac; the saved offline HP record is not an online display or proof of external DDC support.
 
 Both downloads were updated in place on **2026-10-25**, keeping the existing tags and filenames. Lite now includes hardware brightness controls. Full adds clearer per-screen feedback and settings; both use monospaced brightness values and a brief native refresh animation. If you downloaded an earlier build with the same version number, download it again and use its new SHA-256 file. See the [update and validation notes](docs/RELEASE-REFRESH-2026-10-25.md).
 

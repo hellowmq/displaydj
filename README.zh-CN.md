@@ -25,9 +25,11 @@
 
 基础亮度和显示器连接选 Lite；显示设置、自动化和 CLI 选完整版。两者 App 身份、恢复数据和版本独立。参见[维护与发布标准](docs/MAINTENANCE.md)、[贡献说明](CONTRIBUTING.md)和[交互一致性契约](docs/INTERACTION-CONTRACT.md)。
 
-<p align="center"><img src="Assets/DisplayDJLiteIcon.png" alt="DisplayDJ Lite 图标" width="96"></p>
+| DisplayDJ Full 1.0.2 | DisplayDJ Lite 0.1.0（预发布） |
+| :---: | :---: |
+| <img src="Assets/Previews/DisplayDJ-1.0.2-2026-10-25.jpg" alt="Full 1.0.2：真实内建屏亮度界面" width="320"> | <img src="Assets/Previews/DisplayDJLite-0.1.0-2026-10-25.jpg" alt="Lite 0.1.0：真实内建屏亮度与未接入历史记录" width="320"> |
 
-![Lite 0.1.0 更新构建：真实内建屏亮度与未接入历史记录](Assets/Previews/DisplayDJLite-0.1.0-2026-10-25.jpg)
+2026-10-25 构建的真实应用界面。截图展示本机内建屏；保存的 HP 未接入记录不表示设备在线，也不证明外屏 DDC 支持。
 
 两款下载已于 **2026-10-25 原位更新**，沿用原标签和文件名。Lite 新增硬件亮度调节；Full 改善逐屏反馈与设置组织。两版均使用等宽亮度数字和短促的原生刷新动画。此前下载过同版本的用户请重新下载，并使用新的 SHA-256 校验文件。见[本次更新与验证](docs/RELEASE-REFRESH-2026-10-25.md)。
 
