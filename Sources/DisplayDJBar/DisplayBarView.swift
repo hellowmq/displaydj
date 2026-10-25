@@ -1,434 +1,144 @@
 import DisplayDJCore
+import DisplayDJUI
 import SwiftUI
-
-// MARK: - Main View
 
 struct DisplayBarView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @ObservedObject var controller: DisplayBarController
-  /// Drives drag-to-reorder and alias editing. Off unless the user toggles it, so the
-  /// cards behave as plain brightness controls the rest of the time. `EditMode` is iOS-
-  /// only and unavailable on macOS, so the popover keeps its own boolean.
   @State private var isEditing = false
-  /// How tall the stack of cards actually is, measured rather than assumed.
-  ///
-  /// The popover is sized from this view's ideal height, and the scroll view the cards live in
-  /// has none of its own — so without a measurement the window's height stopped tracking its
-  /// contents, and cards added after the popover appeared were clipped instead of counted.
-  /// See `DisplayCardsViewport`.
-  @State private var cardsContentHeight: CGFloat = 0
-
-  // The preset list lives on `DisplayCard`, which is what draws the buttons. A second copy
-  // sat here as well, left behind when the layout stopped being one shared control strip and
-  // became one card per display; nothing read it. Two lists that must agree, only one of
-  // which is rendered, is how the presets and their labels drift apart.
+  @State private var contentHeight: CGFloat = 0
+  @State private var footerHeight: CGFloat = 120
+  @FocusState private var moreIsFocused: Bool
 
   var body: some View {
     VStack(spacing: 0) {
       topBar
-
-      if controller.displays.isEmpty {
-        emptyState
-      } else {
-        displayCards
-      }
-
-      // Displays this app switched off. Drawn after the live cards rather than
-      // among them: they are not part of the topology, so they have no reading
-      // and no slider, and putting them in the same list would hand them a card
-      // that cannot do what every other card does.
-      if !controller.disconnectedDisplays.isEmpty {
-        DisconnectedDisplaySection(
-          records: controller.disconnectedDisplays,
-          notice: controller.connectionNotice,
-          controller: controller
-        )
-        .padding(.top, 4)
-      }
-
-      // Topology-level failure only. Per-display failures are drawn on their own card, so
-      // the user can tell which monitor is complaining and can act on several at once.
-      if let failure = controller.failures.topology {
-        FailureBanner(failure: failure, controller: controller)
-          .padding(.top, 4)
-      }
-
-      Divider().padding(.vertical, 8)
-      if controller.displays.count > 1 {
-        VStack(alignment: .leading, spacing: 5) {
-          HStack(spacing: 8) {
-            Text("同步硬件亮度")
-              .font(.system(size: 11, weight: .medium))
-            Spacer(minLength: 8)
-            Toggle(
-              "同步硬件亮度",
-              isOn: Binding(
-                get: { controller.isBrightnessSyncEnabled },
-                set: { enabled in Task { await controller.setBrightnessSyncEnabled(enabled) } }
-              )
-            )
-            .labelsHidden()
-            .toggleStyle(.switch)
-            .controlSize(.mini)
-            .disabled(controller.isPreparingBrightnessSync || controller.isWriting)
+      if controller.isInteractionPreview {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("模拟演示 · 虚构显示器，操作只改变内存数据")
+          if controller.previewRefreshDelayMilliseconds > 0 {
+            Text("图标动画预览 · 模拟读取延迟 \(controller.previewRefreshDelayMilliseconds)ms")
           }
-          Text("调整任一屏时，其他屏按相同百分点变化；需要每屏都能读取硬件亮度。")
-            .font(.system(size: 10))
-            .foregroundColor(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.bottom, 8)
+        }.font(.system(size: 11)).foregroundStyle(.orange).padding(.bottom, 8)
       }
-      Button("显示设置与预设…") { controller.showDisplayTools() }
-        .font(.system(size: 11))
-        .padding(.bottom, 8)
-      HotkeySettingsRow(controller: controller)
+      ScrollView {
+        VStack(spacing: 8) {
+          if controller.displays.isEmpty { emptyState }
+          ForEach(controller.displays, id: \.selectionKey) { display in
+            DisplayCard(display: display, controller: controller, isEditing: isEditing)
+              .reordering(when: isEditing, display: display, controller: controller)
+          }
+          if !controller.disconnectedDisplays.isEmpty {
+            DisconnectedDisplaySection(records: controller.disconnectedDisplays,
+              notice: controller.connectionNotice, controller: controller)
+          }
+          if let failure = controller.failures.topology {
+            FailureBanner(failure: failure, controller: controller)
+          }
+          if let notice = controller.connectionNotice,
+             !controller.displays.contains(where: { $0.selectionKey == notice.id }),
+             !controller.disconnectedDisplays.contains(where: { DisplayConnectionList.key(for: $0) == notice.id }) {
+            ConnectionNoticeRow(notice: notice)
+          }
+          if controller.quitRecoveryFailed {
+            Text("恢复未完成，已取消退出。记录仍保留，请处理对应提示后重试。")
+              .font(.system(size: 12)).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+          }
+          if let error = controller.connectionRecordError {
+            Label(error, systemImage: "exclamationmark.triangle")
+              .font(.system(size: 12)).foregroundStyle(.orange)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }.measuringHeight(into: $contentHeight)
+      }
+      .frame(height: DisplayCardsViewport.height(contentHeight: contentHeight,
+        availableHeight: controller.panelAvailableHeight, chromeHeight: footerHeight + 74))
+      footer.measuringHeight(into: $footerHeight)
     }
-    .padding(.horizontal, 12)
-    .padding(.vertical, 10)
-    .frame(width: 300)
+    .padding(.horizontal, 12).padding(.vertical, 10).frame(width: 320)
   }
-
-  // MARK: - Top Bar
 
   private var topBar: some View {
     HStack(spacing: 6) {
-      Text("DisplayDJ")
-        .font(.system(size: 10, weight: .semibold))
-        .foregroundColor(.secondary)
-        .accessibilityHidden(true)
-
+      Text(isEditing ? "整理显示器" : "DisplayDJ").font(.system(size: 12, weight: .medium))
       Spacer()
-
-      if controller.showsActivitySpinner {
-        ProgressView()
-          .scaleEffect(0.55)
-          .frame(width: 12, height: 12)
-          .accessibilityLabel(BrightnessAccessibility.busyLabel)
-      }
-
-      Button {
-        Task { await controller.scanAndRefresh() }
-      } label: {
-        Image(systemName: "arrow.triangle.2.circlepath")
-          .font(.system(size: 10, weight: .medium))
-      }
-      .buttonStyle(.plain)
-      .foregroundColor(.secondary)
-      .disabled(controller.showsActivitySpinner)
-      .accessibilityLabel(BrightnessAccessibility.refreshLabel)
-
-      if controller.displays.count > 1 {
-        Button {
-          withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) { isEditing.toggle() }
-        } label: {
-          Image(
-            systemName: isEditing
-              ? "checkmark.circle.fill" : "arrow.up.arrow.down.circle"
-          )
-          .font(.system(size: 10, weight: .medium))
+      if isEditing {
+        Button("恢复物理顺序") { controller.resetOrderToPhysical() }
+          .font(.system(size: 11)).buttonStyle(.borderless)
+        Button("完成") { finishEditing() }.buttonStyle(.borderless)
+      } else {
+        RefreshFeedbackButton(isRefreshing: controller.isRefreshingFromToolbar,
+          isDisabled: controller.isLoading || controller.isRestoringConnections) {
+          await controller.refreshFromToolbar()
         }
-        .buttonStyle(.plain)
-        .foregroundColor(isEditing ? DisplayDJBrandColor.spectralCyan : .secondary)
-        .accessibilityLabel(
-          isEditing
-            ? BrightnessAccessibility.doneEditingLabel
-            : BrightnessAccessibility.editOrderLabel
-        )
-
-        if isEditing {
-          Button {
-            controller.resetOrderToPhysical()
-          } label: {
-            Image(systemName: "arrow.counterclockwise")
-              .font(.system(size: 10, weight: .medium))
-          }
-          .buttonStyle(.plain)
-          .foregroundColor(.secondary)
-          .accessibilityLabel(BrightnessAccessibility.resetOrderLabel)
-        }
+        Menu {
+          Button("整理显示器") {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) { isEditing = true }
+          }.disabled(controller.displays.isEmpty || controller.isLoading)
+          Button("操作偏好…") { controller.showDisplayTools(section: .preferences) }
+          Divider()
+          Button("退出 DisplayDJ") { NSApplication.shared.terminate(nil) }
+            .disabled(controller.isLoading || controller.isRestoringConnections)
+        } label: { Image(systemName: "ellipsis").frame(width: 28, height: 28) }
+        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+        .focusable().focused($moreIsFocused).accessibilityLabel("更多操作")
       }
-    }
-    // The popover window clips its content to a ~16pt corner radius. The toolbar's
-    // trailing icon sits only ~10pt below the top edge and ~12pt from the right edge,
-    // so its top-right corner lands inside that arc and gets chopped — while the
-    // leading label, being transparent glyphs, hides the same clip and reads as
-    // "inconsistent". Pushing the whole bar down clears the radius on both corners
-    // symmetrically. 10pt here on top of the VStack's 10pt gives 20pt of clearance.
-    .padding(.vertical, 10)
+    }.padding(.top, 6).padding(.bottom, 10)
   }
 
-  // MARK: - Empty State
+  private var footer: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Divider().padding(.top, 8)
+      if controller.displays.count > 1 {
+        VStack(alignment: .leading, spacing: 4) {
+          Toggle("同步调节亮度", isOn: Binding(
+            get: { controller.isBrightnessSyncEnabled },
+            set: { enabled in Task { await controller.setBrightnessSyncEnabled(enabled) } }))
+            .toggleStyle(.switch).controlSize(.mini)
+            .disabled(controller.isPreparingBrightnessSync || controller.isWriting || isEditing)
+          if controller.isPreparingBrightnessSync {
+            Text("正在检查各屏亮度").foregroundStyle(.secondary)
+          } else if controller.isBrightnessSyncEnabled {
+            Text("其他屏按相同百分点变化").foregroundStyle(.secondary)
+          }
+        }
+      }
+      if controller.brightnessSyncResults.values.contains(false) {
+        Text("部分屏幕未完成，请查看对应提示").foregroundStyle(.orange)
+          .font(.system(size: 11)).fixedSize(horizontal: false, vertical: true)
+      }
+      if let title = controller.keyboardSummary {
+        Button { controller.showDisplayTools(section: .preferences) } label: {
+          HStack {
+            VStack(alignment: .leading, spacing: 3) {
+              Text(title)
+              Text("操作偏好").font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right").foregroundStyle(.secondary)
+          }.frame(minHeight: 38).contentShape(Rectangle())
+        }.buttonStyle(.plain).accessibilityLabel("\(title)，操作偏好")
+      }
+      Button { controller.showDisplayTools(section: .display) } label: {
+        HStack { Text("显示设置…"); Spacer(); Image(systemName: "chevron.right").foregroundStyle(.secondary) }
+          .frame(minHeight: 28).contentShape(Rectangle())
+      }.buttonStyle(.plain)
+      if controller.isRestoringConnections {
+        Label("正在恢复外屏，确认后退出…", systemImage: "arrow.triangle.2.circlepath")
+          .foregroundStyle(.secondary)
+      }
+    }.font(.system(size: 12)).padding(.bottom, 2)
+  }
 
   private var emptyState: some View {
-    VStack(spacing: 10) {
-      Image(systemName: "display.trianglebadge.exclamationmark")
-        .font(.title2)
-        .foregroundColor(.secondary)
-        .accessibilityHidden(true)
-      Text("未检测到可控制的显示器")
-        .font(.subheadline)
-        .foregroundColor(.secondary)
-      Button {
-        Task { await controller.scanAndRefresh() }
-      } label: {
-        Label("重新扫描", systemImage: "arrow.clockwise")
-          .font(.caption)
-      }
-      .buttonStyle(.borderless)
-      .accessibilityLabel(BrightnessAccessibility.rescanLabel)
-    }
-    .padding(.vertical, 32)
+    VStack(alignment: .leading, spacing: 8) {
+      Label("未检测到可控制的显示器", systemImage: "display")
+      Text("连接显示器后刷新；恢复记录会单独保留。")
+    }.font(.system(size: 12)).foregroundStyle(.secondary).padding(.vertical, 20)
   }
 
-  // MARK: - Display Cards
-
-  private var displayCards: some View {
-    ScrollView {
-      VStack(spacing: 6) {
-        ForEach(controller.displays, id: \.selectionKey) { display in
-          DisplayCard(
-            display: display,
-            controller: controller,
-            isEditing: isEditing
-          )
-          .reordering(when: isEditing, display: display, controller: controller)
-        }
-      }
-      .measuringHeight(into: $cardsContentHeight)
-    }
-    // A definite height, not `maxHeight`: `maxHeight` let the scroll view accept any height the
-    // window happened to have, so a popover sized while the topology was still unknown stayed
-    // that size and hid the cards that arrived next.
-    .frame(height: DisplayCardsViewport.height(contentHeight: cardsContentHeight))
-  }
-}
-
-// MARK: - Failure Banner
-//
-// `FailureBanner` lives in FailureBanner.swift. It is drawn both by the topology row above
-// and by every card below, so it is not private to either.
-
-// MARK: - Display Card
-
-/// One display's brightness controls. Each card manages its own local
-/// slider state so dragging one never disturbs another.
-private struct DisplayCard: View {
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  let display: DisplayDescriptor
-  @ObservedObject var controller: DisplayBarController
-  /// Whether the popover is in reorder/alias-editing mode. Passed in (not read from the
-  /// environment) because `EditMode` is unavailable on macOS.
-  let isEditing: Bool
-
-  @State private var sliderValue: Double
-  @State private var isDragging = false
-
-  init(display: DisplayDescriptor, controller: DisplayBarController, isEditing: Bool) {
-    self.display = display
-    self.controller = controller
-    self.isEditing = isEditing
-    // A transient popover rebuilds its cards on every open. Start from the reading already
-    // held by the controller so the first frame cannot briefly draw an invented 50%.
-    _sliderValue = State(initialValue: Double(controller.displayedBrightness(for: display.stableID ?? "") ?? 0))
-  }
-
-  private var stableID: String { display.stableID ?? "" }
-  /// The name shown on the card: the user's alias when set, else the system name.
-  private var shownName: String { controller.alias(for: display) }
-  /// A two-way binding to this display's alias, writing through the controller.
-  private var aliasBinding: Binding<String> {
-    Binding(
-      get: { shownName },
-      set: { controller.setAlias($0, forStableID: stableID) }
-    )
-  }
-  /// Key this card's banner is filed under.
-  ///
-  /// Not `stableID`: a display that has none is exactly the display with something to report,
-  /// and every such card would collapse onto the same empty key. `selectionKey` is the stable
-  /// ID when there is one and a namespaced runtime key when there is not, so each card keeps
-  /// its own slot either way.
-  private var failureKey: String { display.selectionKey }
-  private var canControl: Bool { controller.canControl(stableID) }
-  /// A `±` step has nothing to add to until a reading exists, so the buttons say so
-  /// instead of looking available and quietly doing nothing.
-  private var canAdjustRelatively: Bool { controller.canAdjustRelatively(stableID) }
-  private var displayedBrightness: Int? {
-    controller.displayedBrightness(for: stableID)
-  }
-
-  private var isSelected: Bool {
-    controller.selectedDisplayKey == display.selectionKey
-  }
-
-  private var showsScrollTargetBadge: Bool {
-    isSelected && ScrollTargetBadge.shows(displayCount: controller.displays.count)
-  }
-
-  var body: some View {
-    VStack(spacing: 4) {
-      // Header: name + readout
-      HStack(spacing: 4) {
-        Text(shownName)
-          .font(.system(size: 11, weight: .medium))
-          .foregroundColor(.primary)
-          .lineLimit(1)
-          .truncationMode(.tail)
-
-        if showsScrollTargetBadge {
-          // Selection now has a consequence, so it gets words instead of a dot: this is the
-          // card the menu bar wheel will move. Withheld on a single display, where naming
-          // the target would only name the obvious.
-          Text(ScrollTargetBadge.title(hotkeysEnabled: controller.hotkeysEnabled))
-            .font(.system(size: 9, weight: .medium))
-            .foregroundColor(.secondary)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(Capsule().fill(DisplayDJBrandColor.spectralCyan.opacity(0.12)))
-            .accessibilityLabel(ScrollTargetBadge.accessibilityLabel)
-        } else if isSelected {
-          Circle()
-            .fill(DisplayDJBrandColor.spectralCyan)
-            .frame(width: 4, height: 4)
-            .accessibilityHidden(true)
-        }
-
-        Spacer()
-
-        BrightnessReadout(value: isDragging ? Int(sliderValue.rounded()) : displayedBrightness)
-
-        DisplayConnectionButton(display: display, controller: controller)
-      }
-
-      // Alias editor: shown only while rearranging, so the card stays a brightness
-      // control the rest of the time. Writing an empty string clears the alias.
-      if isEditing {
-        TextField("别名（可选）", text: aliasBinding)
-          .font(.system(size: 11))
-          .textFieldStyle(.plain)
-          .padding(.horizontal, 6)
-          .padding(.vertical, 3)
-          .background(
-            RoundedRectangle(cornerRadius: 5)
-              .fill(Color.primary.opacity(0.05))
-          )
-          .accessibilityLabel("显示器别名")
-      }
-
-      // Slider, full width. It used to be pinned to 248pt to leave room beside it for the step
-      // buttons and the presets on the row below; with that row gone there is nothing to share
-      // the width with, and a track that spans the card states the one thing this card is for.
-      BrightnessSlider(
-        value: $sliderValue,
-        isEnabled: canAdjustRelatively,
-        // A relative step needs a real reading. The local state has a harmless zero fallback
-        // before the first read, but it must never become a keyboard or VoiceOver baseline.
-        hasReading: canAdjustRelatively,
-        isDragging: $isDragging,
-        onDragChanged: { intValue in
-          Task { await controller.setBrightness(intValue, for: stableID) }
-        },
-        onCommit: { intValue in
-          Task { await controller.setBrightness(intValue, for: stableID) }
-        }
-      )
-      .disabled(!canAdjustRelatively || isEditing || controller.isPreparingBrightnessSync)
-
-      // This display's own failure, drawn on this display's card. A single shared strip at
-      // the bottom could not say which monitor it was about, and could only ever show one.
-      if let failure = controller.failure(for: failureKey) {
-        FailureBanner(failure: failure, controller: controller)
-          .padding(.top, 2)
-      }
-
-      // The outcome of disconnecting *this* display, filed under this card's key.
-      // A connection notice aimed elsewhere belongs to a different display — the
-      // one that is no longer online and is drawn in its own section below.
-      if let notice = controller.connectionNotice, notice.id == failureKey {
-        ConnectionNoticeRow(notice: notice)
-          .padding(.top, 2)
-      }
-    }
-    .padding(.horizontal, 8)
-    .padding(.vertical, 6)
-    .background(
-      RoundedRectangle(cornerRadius: 7)
-        .fill(isSelected ? DisplayDJBrandColor.spectralCyan.opacity(0.06) : Color.primary.opacity(0.03))
-        .overlay(
-          RoundedRectangle(cornerRadius: 7)
-            .strokeBorder(isSelected ? DisplayDJBrandColor.spectralCyan.opacity(0.2) : Color.clear, lineWidth: 1)
-        )
-    )
-    .contentShape(Rectangle())
-    .onTapGesture {
-      // While reordering, a tap must not also select the card — the row is being dragged.
-      if !isEditing {
-        selectThisDisplay()
-      }
-    }
-    // Keep the appearance sync as a safety net if the reading changes between initialisation
-    // and appearance. The initial state above handles the first frame; onChange handles later
-    // reads without replacing an active drag.
-    .onAppear {
-      applySync(reading: displayedBrightness, occasion: .cardAppeared)
-    }
-    .onChange(of: displayedBrightness) { newValue in
-      applySync(reading: newValue, occasion: .readingChanged)
-    }
-    .accessibilityElement(children: .contain)
-    .accessibilityLabel("\(shownName) 亮度控制")
-    .accessibilityValue(BrightnessAccessibility.valueDescription(for: displayedBrightness))
-    // The card is also the display selector, so its selected state has to be spoken;
-    // the accent dot that conveys it visually is hidden from VoiceOver.
-    .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-    .accessibilityHint(BrightnessAccessibility.displayPickerLabel)
-    // Announcing `.isSelected` without offering a way to *become* selected describes an
-    // affordance that only a mouse can reach. The tap gesture above is pointer-only, so
-    // without this the card told VoiceOver it was selectable and then gave it nothing to
-    // activate. Both entry points resolve through `SelectDisplayAction`, so they cannot
-    // drift apart the way the gesture drifted from the key selection is actually stored by.
-    .accessibilityAction(named: BrightnessAccessibility.selectDisplayActionLabel) {
-      selectThisDisplay()
-    }
-  }
-
-  /// The single way this card's slider adopts a reading.
-  ///
-  /// Shared by the appearing card and by a reading that lands later, on purpose: they are one
-  /// question — should the slider take this number? — and the animation is the only thing that
-  /// legitimately differs between them. Splitting them is how the card came to have a rule for
-  /// staying in step and none for starting in step.
-  private func applySync(reading: Int?, occasion: SliderSync.Occasion) {
-    guard
-      case .adopt(let value, let animated) = SliderSync.resolve(
-        reading: reading,
-        isDragging: isDragging,
-        occasion: occasion
-      )
-    else { return }
-    guard animated && !reduceMotion else {
-      sliderValue = value
-      return
-    }
-    withAnimation(.easeOut(duration: 0.2)) {
-      sliderValue = value
-    }
-  }
-
-  /// The single way this card becomes the selected display.
-  ///
-  /// Shared by the pointer and by assistive technology on purpose: when the gesture resolved
-  /// its own key it used `stableID`, while selection is stored under `selectionKey`, so a
-  /// display without a stable identity could be selected by the app and never by the user.
-  private func selectThisDisplay() {
-    guard
-      case .select(let key) = SelectDisplayAction.resolve(
-        selectionKey: display.selectionKey,
-        currentSelection: controller.selectedDisplayKey
-      )
-    else { return }
-    controller.selectDisplay(key: key)
+  private func finishEditing() {
+    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) { isEditing = false }
+    Task { @MainActor in await Task.yield(); moreIsFocused = true }
   }
 }

@@ -17,15 +17,15 @@ struct FailureBanner: View {
   var body: some View {
     HStack(alignment: .top, spacing: 5) {
       Image(systemName: "exclamationmark.triangle.fill")
-        .font(.system(size: 9))
+        .font(.system(size: 11))
         .padding(.top, 1)
         .accessibilityHidden(true)
 
       VStack(alignment: .leading, spacing: 2) {
         Text(failure.summary)
-          .font(.system(size: 10, weight: .semibold))
+          .font(.system(size: 12, weight: .semibold))
         Text(failure.suggestion)
-          .font(.system(size: 10))
+          .font(.system(size: 12))
           .foregroundColor(.orange.opacity(0.85))
       }
       .fixedSize(horizontal: false, vertical: true)
@@ -36,7 +36,7 @@ struct FailureBanner: View {
           Task { await controller.recover(from: failure) }
         }
         .buttonStyle(.link)
-        .font(.system(size: 10, weight: .medium))
+        .font(.system(size: 12, weight: .medium))
         .disabled(controller.showsActivitySpinner)
         .accessibilityLabel(BrightnessAccessibility.recoveryLabel(title))
       }

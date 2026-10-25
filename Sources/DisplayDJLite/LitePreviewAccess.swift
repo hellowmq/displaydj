@@ -1,8 +1,12 @@
 import DisplayDJCore
 import Foundation
 
+enum LitePreviewBrightnessFailure: String, Sendable {
+  case none, read, write
+}
+
 /// Memory-only UI preview. It never creates the live service or touches recovery files.
-actor LitePreviewAccess: LiteConnectionAccess {
+actor LitePreviewAccess: LiteConnectionAccess, LiteBrightnessAccess {
   nonisolated let unavailableReason: String? = nil
   var displays = [
     DisplayDescriptor(runtimeID: 1, stableID: "uuid:11111111-1111-1111-1111-111111111111",
@@ -14,8 +18,49 @@ actor LitePreviewAccess: LiteConnectionAccess {
   ]
   var records = [DisplayConnectionRecord(runtimeID: 4,
     stableID: "uuid:44444444-4444-4444-4444-444444444444", name: "示例恢复屏 C（模拟）")]
+  private var brightnessValues: [String: Int] = [:]
+  private let brightnessFailure: LitePreviewBrightnessFailure
+  private var failureConsumed = false
+  private let refreshDelay: Duration
 
-  func snapshot() async throws -> LiteSnapshot { .init(displays: displays, records: records) }
+  init(compact: Bool = false, brightnessFailure: LitePreviewBrightnessFailure = .none,
+       refreshDelay: Duration = .zero) {
+    self.brightnessFailure = brightnessFailure
+    self.refreshDelay = refreshDelay
+    if compact {
+      displays = displays.filter { !$0.isMirrored }
+      records = []
+    }
+  }
+
+  func read(stableID: String) async throws -> Int {
+    guard let display = displays.first(where: { $0.stableID == stableID }), !display.isMirrored else {
+      throw LiteRefusal("模拟目标不在线或不支持调光。")
+    }
+    if !display.isBuiltIn, brightnessFailure == .read, !failureConsumed {
+      failureConsumed = true
+      throw LiteRefusal("模拟：未能读取外屏亮度，请重新读取。")
+    }
+    return brightnessValues[stableID] ?? (display.isBuiltIn ? 45 : 62)
+  }
+
+  func write(percent: Int, stableID: String) async throws -> Int {
+    _ = try await read(stableID: stableID)
+    try await Task.sleep(for: .milliseconds(400))
+    _ = try await read(stableID: stableID)
+    if displays.contains(where: { $0.stableID == stableID && !$0.isBuiltIn }),
+       brightnessFailure == .write, !failureConsumed {
+      failureConsumed = true
+      throw LiteRefusal("模拟：未确认本次调节，请重新读取后重试。")
+    }
+    brightnessValues[stableID] = percent
+    return percent
+  }
+
+  func snapshot() async throws -> LiteSnapshot {
+    if refreshDelay > .zero { try await Task.sleep(for: refreshDelay) }
+    return .init(displays: displays, records: records)
+  }
 
   func change(_ state: DisplayConnectionState, stableID: String) async throws -> DisplayConnectionOutcome {
     try await Task.sleep(for: .milliseconds(450))

@@ -24,9 +24,8 @@ struct ScrollTargetBadgeTests {
 
   /// The hotkeys are off by default. Naming them while they are inert would credit the badge
   /// with an effect the current settings do not have.
-  @Test("The hotkeys are named only while they are live")
-  func titleFollowsHotkeys() {
-    #expect(ScrollTargetBadge.title(hotkeysEnabled: false) == "滚轮目标")
-    #expect(ScrollTargetBadge.title(hotkeysEnabled: true).contains("快捷键"))
+  @Test("The badge names only the wheel, independently of keyboard target policy")
+  func titleNamesWheelOnly() {
+    #expect(ScrollTargetBadge.title == "菜单栏滚轮目标")
   }
 }

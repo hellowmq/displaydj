@@ -117,7 +117,7 @@ struct BrightnessSlider: View {
         // fifth of the range. At 5pt that was a detail on a hairline; R2 made this bar the
         // card's primary control, where it is the first thing anyone sees.
         Capsule()
-          .fill(DisplayDJBrandColor.spectralCyan)
+          .fill(DisplayDJBrandColor.controlAccent)
           .frame(width: trackFillWidth(in: geometry.size.width), height: Metrics.trackHeight)
           .animation(valueAnimation, value: trackState.fillRatio)
 
@@ -212,7 +212,7 @@ struct BrightnessSlider: View {
   private var focusRing: some View {
     if isFocused {
       RoundedRectangle(cornerRadius: 8)
-        .strokeBorder(DisplayDJBrandColor.spectralCyan.opacity(0.85), lineWidth: 2)
+        .strokeBorder(DisplayDJBrandColor.controlAccent.opacity(0.85), lineWidth: 2)
         .frame(height: Metrics.focusRingHeight)
     }
   }

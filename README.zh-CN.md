@@ -21,19 +21,21 @@
 | 产品 | 范围 | 状态 |
 | --- | --- | --- |
 | **DisplayDJ 完整版** | 亮度、显示设置、连接控制、CLI 与可选本地服务 | [下载 1.0.2](https://github.com/hellowmq/displaydj/releases/tag/v1.0.2) |
-| **DisplayDJ Lite** | 单台外屏断开、重新连接和恢复记录 | [下载 0.1.0 预发布版](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.1.0) · [验证记录](docs/DISPLAYDJ-LITE.md) |
+| **DisplayDJ Lite** | 内建屏亮度、支持的外屏 DDC 亮度，以及外屏断开、重新连接和恢复记录 | [下载 0.1.0 预发布版](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.1.0) · [验证记录](docs/DISPLAYDJ-LITE.md) |
 
-Lite 是当前聚焦的用户验证入口，完整版继续维护。两者共享连接内核，App 身份、恢复数据和版本独立。参见[维护与发布标准](docs/MAINTENANCE.md)、[贡献说明](CONTRIBUTING.md)和[交互一致性契约](docs/INTERACTION-CONTRACT.md)。
+基础亮度和显示器连接选 Lite；显示设置、自动化和 CLI 选完整版。两者 App 身份、恢复数据和版本独立。参见[维护与发布标准](docs/MAINTENANCE.md)、[贡献说明](CONTRIBUTING.md)和[交互一致性契约](docs/INTERACTION-CONTRACT.md)。
 
 <p align="center"><img src="Assets/DisplayDJLiteIcon.png" alt="DisplayDJ Lite 图标" width="96"></p>
 
-![Lite 0.1.0 真实运行预览，保存记录不代表设备当前在线](Assets/Previews/DisplayDJLite-0.1.0.png)
+![Lite 0.1.0 更新构建：真实内建屏亮度与未接入历史记录](Assets/Previews/DisplayDJLite-0.1.0-2026-10-25.jpg)
+
+两款下载已于 **2026-10-25 原位更新**，沿用原标签和文件名。Lite 新增硬件亮度调节；Full 改善逐屏反馈与设置组织。两版均使用等宽亮度数字和短促的原生刷新动画。此前下载过同版本的用户请重新下载，并使用新的 SHA-256 校验文件。见[本次更新与验证](docs/RELEASE-REFRESH-2026-10-25.md)。
 
 Lite 正常退出须先确认当前目标恢复；断开前会确认恢复子进程已就绪，用于主界面异常结束后的恢复。Dell 的普通重连、恢复退出及强制结束恢复已通过实机核验；旧 HP 未接入记录仍保留。覆盖安装不会删除恢复记录，卸载前请先恢复并退出，见[恢复与卸载说明](docs/LITE-RECOVERY.md)。
 
 DisplayDJ 把“连接状态”也变成显示器控制的一部分，而不只是让你去拔线。主动断开一台显示器后，它会从 macOS 桌面布局中消失，窗口移到仍在线的屏幕；需要时再从菜单栏或 `display-cli` 重新连接。这不同于把屏幕调暗或发送 DDC 休眠命令。
 
-同一个 App 还可以控制亮度、对比度、显示器音量、显示模式和命名亮度预设。独立 CLI 无需打开 App 或常驻服务即可工作；只有需要持续状态的自动化任务才需要可选的本地 HTTP 服务。
+完整版还可以控制对比度、显示器音量、显示模式和命名亮度预设。独立 CLI 无需打开 App 或常驻服务即可工作；只有需要持续状态的自动化任务才需要可选的本地 HTTP 服务。
 
 <p align="center">
   <img src="Assets/DisplayDJIcon.svg" alt="DisplayDJ 图标" width="160">
@@ -52,6 +54,7 @@ DisplayDJ 把“连接状态”也变成显示器控制的一部分，而不只�
 
 | 入口 | 适合谁 | 已实现能力 |
 | --- | --- | --- |
+| **DisplayDJLite.app** | 基础亮度与显示器连接 | 内建屏原生亮度、支持的外屏 DDC 亮度、逐屏反馈、断开/重连与恢复后退出；无 CLI 或本地服务 |
 | **DisplayDJ.app** | 日常桌面操作 | 亮度卡片、滚轮、可选快捷键与亮度媒体键、逐屏亮度提示、别名与排序、断开/重连；显示设置窗口提供每屏 Gamma、模式、外屏音量/对比度、亮度预设与可选硬件亮度同步 |
 | **display-cli** | 终端、脚本、编程 Agent | 显示器发现、亮度、恢复、断开/重连、保活、任务阶段、诊断、服务管理；无需启动 App 或后台服务 |
 | **可选本地服务** | 需要 HTTP 接入或跨命令持续状态的自动化 | Bearer token 鉴权、Gamma、保活租约、会话与心跳；通过 CLI 启停 |
@@ -61,6 +64,8 @@ DisplayDJ 把“连接状态”也变成显示器控制的一部分，而不只�
 ## 快速开始
 
 ### 下载 App
+
+只需基础亮度和显示器连接，可下载 [Lite 0.1.0](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.1.0)，将 `DisplayDJLite.app` 放入 `/Applications`。Lite 仍为预发布版。覆盖任一应用前，先恢复当前外屏并正常退出；两款 App 分别安装。
 
 从 [完整版 1.0.2](https://github.com/hellowmq/displaydj/releases/tag/v1.0.2) 下载 arm64 ZIP 或 DMG。安装包同时包含 `DisplayDJ.app`、独立的 `display-cli` 和兼容旧脚本的 `displaydj` 命令。
 
@@ -175,7 +180,7 @@ open -a DisplayDJ --args --display-tools
 | 能力 | 当前边界 |
 | --- | --- |
 | Apple Silicon 外屏 DDC | 共用 DisplayDJ 读写实现；v1.0.0 在 HP D27k 当前连接验证了亮度和对比度写入、回读与恢复；该屏音量不支持 DDC 调节 |
-| 内建屏亮度 | 主 CLI / HTTP 的 DisplayServices 后端；v1.0.0 完成小幅写入、独立回读与恢复 |
+| 内建屏亮度 | Full / Lite 均使用原生 DisplayServices；Lite 已在本机 Apple M1 通过 GUI 调节、独立回读和精确原值恢复，不扩展为外屏 DDC 兼容结论 |
 | Intel 外屏 DDC | 未实现生产读写路径；可能使用软件 Gamma |
 | macOS 13/14 | 构建目标从 13 起；v1.0.0 只在本机 macOS 27 实测，尚无最低版本的安装与硬件验收 |
 | 显示器断开 / 重连 | 依赖私有 API；v1.0.0 在此前 Dell 当前连接上完成断开、重连与拓扑回读，其他设备尚无此证据 |

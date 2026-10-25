@@ -44,6 +44,12 @@ struct BrightnessIntentBuffer {
     !pendingOrder.isEmpty
   }
 
+  /// A newer request may repeat the active value. Equality of percentages
+  /// cannot determine whether that active result still owns the UI feedback.
+  func hasPending(for displayStableID: String) -> Bool {
+    pendingValues[displayStableID] != nil
+  }
+
   var isDraining: Bool {
     active != nil
   }

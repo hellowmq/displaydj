@@ -1,5 +1,20 @@
 # DisplayDJ Lite 0.1.0 — 预发布 / Prerelease
 
+## 2026-10-25 原位更新 / Refreshed build
+
+按维护者明确授权，保留 `lite-v0.1.0` 与原下载文件名，更新标签源码、ZIP、DMG 与各自 SHA-256。Lite 仍为预发布版，Full 1.0.2 仍为最新稳定版。已下载旧包的用户请重新下载，并使用新的校验文件。
+
+- 新增基础硬件亮度：内建屏原生背光、支持的外屏 DDC；不支持时明确报错，不自动改用 Gamma。
+- 亮度数字等宽，原生滑块支持键盘调节；每屏分别显示请求、确认或失败，过期结果不能覆盖最新意图。
+- 与 Full 共用原生刷新图标、即时按压反馈和更短的单次旋转；快速读取不闪现“刷新中”，减少动态效果时保持静态。退出文字不随读取反复变灰，恢复检查保留。
+- 756 项自动测试通过，其中 Lite 50 项；本机 Lite GUI 已完成内建屏调节、独立读回及精确原值恢复。历史 Dell 连接恢复证据仍单列，不将其当作 Lite 外屏 DDC 的新验收。
+
+![Lite 0.1.0 更新构建的真实硬件亮度界面](../Assets/Previews/DisplayDJLite-0.1.0-2026-10-25.jpg)
+
+**English:** Lite now includes native built-in brightness and DDC brightness on supported external displays, with monospaced values, per-display verification feedback and keyboard adjustment. Both products share faster native refresh feedback; Lite quit text stays visually stable. Download again if you have an earlier 0.1.0 build and use the new SHA-256 file. This remains an arm64, ad-hoc-signed, unnotarized prerelease. See the [update and validation notes](RELEASE-REFRESH-2026-10-25.md).
+
+## 2026-10-16 首次发行（历史记录）
+
 2026-10-16 · [下载 ZIP / DMG](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.1.0)
 
 Lite 是独立的菜单栏应用，用于将一台外接显示器从 Mac 桌面中断开，稍后重新连接。它不关闭显示器电源、不切换输入源，也不包含 Full 的亮度控制、CLI 或本地服务。Full 1.0.2 继续作为最新稳定版维护，两款应用分别安装、分别保存恢复记录。

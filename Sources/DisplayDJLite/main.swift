@@ -11,6 +11,7 @@ final class LiteApplication: NSObject, NSApplicationDelegate, NSPopoverDelegate 
   private let topology = CGDisplayTopologyChangeSource()
   private var delayedRefresh: Task<Void, Never>?
   private var isPreview = false
+  private var previewRefreshDelayMilliseconds = 0
   private var isCheckingQuit = false
   private var canTerminate = false
   private var isConfirmingConnection = false
@@ -18,17 +19,39 @@ final class LiteApplication: NSObject, NSApplicationDelegate, NSPopoverDelegate 
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     isPreview = CommandLine.arguments.contains("--preview")
-    let access: any LiteConnectionAccess = isPreview ? LitePreviewAccess() : LiteConnectionService.live(
-      ensureRecoveryProtection: { [guardian] in try await guardian.ensureStarted() })
-    let model = LiteModel(access: access)
+    let access: any LiteConnectionAccess
+    let brightnessAccess: any LiteBrightnessAccess
+    if isPreview {
+      let args = CommandLine.arguments
+      func value(after flag: String) -> String? {
+        guard let index = args.firstIndex(of: flag), args.indices.contains(index + 1) else { return nil }
+        return args[index + 1]
+      }
+      // Preview-only overrides never change system preferences or the live adapter.
+      if let appearance = value(after: "--appearance"), appearance != "system" {
+        NSApp.appearance = NSAppearance(named: appearance == "light" ? .aqua : .darkAqua)
+      }
+      let failure = LitePreviewBrightnessFailure(rawValue: value(after: "--failure") ?? "none") ?? .none
+      let delay = min(5000, max(0, Int(value(after: "--refresh-delay-ms") ?? "0") ?? 0))
+      previewRefreshDelayMilliseconds = delay
+      let preview = LitePreviewAccess(compact: !args.contains("--all-scenarios"), brightnessFailure: failure,
+        refreshDelay: .milliseconds(delay))
+      access = preview
+      brightnessAccess = preview
+    } else {
+      access = LiteConnectionService.live(ensureRecoveryProtection: { [guardian] in try await guardian.ensureStarted() })
+      brightnessAccess = LiteHardwareBrightnessAccess()
+    }
+    let model = LiteModel(access: access, brightnessAccess: brightnessAccess)
     self.model = model
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     item.button?.image = LiteStatusIcon.makeImage()
-    item.button?.toolTip = "DisplayDJ Lite — 外屏连接控制"
+    item.button?.toolTip = "DisplayDJ Lite — 亮度与外屏连接"
     item.button?.target = self
     item.button?.action = #selector(togglePopover)
     statusItem = item
-    let hosting = NSHostingController(rootView: LiteView(model: model, isPreview: isPreview, quit: {
+    let hosting = NSHostingController(rootView: LiteView(model: model, isPreview: isPreview,
+      previewRefreshDelayMilliseconds: previewRefreshDelayMilliseconds, quit: {
       NSApplication.shared.terminate(nil)
     }, perform: { [weak self] row in self?.requestAction(row) }))
     hosting.sizingOptions = [.preferredContentSize]

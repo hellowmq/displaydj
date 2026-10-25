@@ -1,5 +1,23 @@
 # DisplayDJ 1.0.2
 
+## 2026-10-25 原位更新 / Refreshed build
+
+按维护者明确授权，保留 `v1.0.2` 与原下载文件名，更新标签源码、ZIP、DMG 及各自 SHA-256。Full 继续作为最新稳定版。已下载旧包的用户需重新下载，并使用本次新校验文件；相同版本号不表示文件相同。
+
+- 交付已选 Full 主面板：逐屏亮度卡片、等宽读数、明确的菜单栏滚轮与键盘目标、逐屏请求/确认/失败反馈、分组设置。
+- 断开前显示独立确认，提交前核对稳定目标；GUI 退出前恢复并核验当前记录，失败保留记录并取消退出。
+- 使用原生刷新图标的稳定轴心，按下即时响应、单次短旋转；稍久读取显示静态“刷新中”，快速读取不闪现文字。保持单色，亮度操作不触发刷新动画。
+- 系统减少动态效果或 macOS 13/14 使用静态刷新反馈。
+- 756 项自动测试通过；Full/Lite 原生刷新、生命周期及减少动态效果检查通过。内建屏与历史外屏证据分列，未扩展 Intel、最低系统、干净首装、睡眠唤醒或全型号支持承诺。
+
+发布包仍为 Apple Silicon arm64、ad-hoc 签名、未经 Apple 公证。升级与全局快捷键重新授权步骤见下文。完整验证见 [本次更新记录](RELEASE-REFRESH-2026-10-25.md)。
+
+![Full 1.0.2 更新构建的真实内建屏界面](../Assets/Previews/DisplayDJ-1.0.2-2026-10-25.jpg)
+
+**English:** This in-place refresh delivers the selected Full interaction design, stable per-display values and feedback, safer connection confirmation and restore-before-quit, and faster native refresh-symbol feedback. Download again if you have an earlier 1.0.2 build, and use the new SHA-256 file. The existing tag and asset names are retained at the maintainer’s explicit request. Distribution remains arm64, ad-hoc signed and not notarized.
+
+## 2026-10-12 首次发行（历史记录）
+
 键盘调光现在提供逐屏亮度指示器，连续调节保持数值稳定；新增可单独启用的亮度媒体键，并修复固定快捷键事件透传问题。
 
 ## 主要变化
@@ -28,6 +46,6 @@
 - 用户已确认重新授权后全局快捷键可用。独立媒体键、本轮外屏 DDC 长按、真实睡眠唤醒、Intel、最低系统和干净用户升级仍未完成实机验证。本机 Touch Bar 不等于独立媒体键测试环境。
 - 长按音效修复已有事件消费回归测试，尚无独立实机听感证据；组件检查不代替完整键盘端到端验收。
 
-发布源码固定为 `v1.0.2`（`9d33002`）。行为与开发验证记录见 [键盘亮度说明](https://github.com/hellowmq/displaydj/blob/v1.0.2/docs/KEYBOARD-BRIGHTNESS.md)，手动控制规则见 [手动亮度优先](https://github.com/hellowmq/displaydj/blob/v1.0.2/docs/MANUAL-BRIGHTNESS-PRIORITY.md)。
+首次发行源码为 `9d33002`；以下 CI 链接属于 2026-10-12 历史发行。当前 `v1.0.2` 已按维护者授权改指 2026-10-25 更新源码，见页面顶部记录。行为与开发验证记录见 [键盘亮度说明](https://github.com/hellowmq/displaydj/blob/v1.0.2/docs/KEYBOARD-BRIGHTNESS.md)，手动控制规则见 [手动亮度优先](https://github.com/hellowmq/displaydj/blob/v1.0.2/docs/MANUAL-BRIGHTNESS-PRIORITY.md)。
 
 最终 ZIP 内容一致性、DMG 挂载后的全部文件、内嵌 MIT 许可证、严格签名、包内 CLI 冒烟及 SHA-256 均通过检查。源码提交与标签 CI 通过：[master 检查](https://github.com/hellowmq/displaydj/actions/runs/38218665868)、[v1.0.2 标签检查](https://github.com/hellowmq/displaydj/actions/runs/38218772566)。

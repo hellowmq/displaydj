@@ -1,11 +1,14 @@
+import DisplayDJUI
 import SwiftUI
 
 struct LiteView: View {
   @ObservedObject var model: LiteModel
   let isPreview: Bool
+  var previewRefreshDelayMilliseconds: Int = 0
   let quit: () -> Void
   let perform: (LiteDisplayRow) -> Void
   @State private var showsHelp = false
+  @Environment(\.colorScheme) private var colorScheme
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -13,56 +16,56 @@ struct LiteView: View {
         VStack(alignment: .leading, spacing: 5) {
           Text(isPreview ? "模拟演示 · DisplayDJ Lite" : "DisplayDJ Lite").font(.system(size: 13, weight: .semibold))
           Text(summary).font(.system(size: 12))
-            .foregroundStyle(model.quitRecoveryFailed ? Color.orange : Color.secondary)
+            .foregroundStyle(model.quitRecoveryFailed ? LiteFeedbackColor.warning(for: colorScheme) : Color.secondary)
         }
         Spacer()
-        Button { Task { await model.refresh() } } label: {
-          Group {
-            if model.isRefreshing { ProgressView().controlSize(.mini) }
-            else { Image(systemName: "arrow.clockwise") }
-          }.frame(width: 28, height: 28)
+        RefreshFeedbackButton(isRefreshing: model.isRefreshingFromToolbar, isDisabled: model.isBusy) {
+          await model.refreshFromToolbar()
         }
-        .buttonStyle(.borderless).disabled(model.isBusy)
-        .accessibilityLabel("刷新显示器").help("刷新显示器（⌘R）")
-        .keyboardShortcut("r", modifiers: .command)
+        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 5 }
       }
       .padding(.bottom, 16)
 
       if isPreview {
-        Label("虚构示例 · 未读取本机设备", systemImage: "testtube.2")
-          .font(.caption).foregroundStyle(.orange).padding(.bottom, 12)
+        VStack(alignment: .leading, spacing: 4) {
+          Label("虚构示例 · 未读取本机设备", systemImage: "testtube.2")
+          if previewRefreshDelayMilliseconds > 0 {
+            Text("图标动画预览 · 模拟读取延迟 \(previewRefreshDelayMilliseconds)ms")
+          }
+        }.font(.caption).foregroundStyle(LiteFeedbackColor.warning(for: colorScheme)).padding(.bottom, 12)
       }
       if let error = model.error {
         Label(error, systemImage: "exclamationmark.triangle")
-          .font(.callout).foregroundStyle(.orange)
+          .font(.callout).foregroundStyle(LiteFeedbackColor.warning(for: colorScheme))
           .fixedSize(horizontal: false, vertical: true).padding(.bottom, 12)
       }
 
-      if model.rows.isEmpty {
+      if model.rows.isEmpty && model.builtInDisplays.isEmpty {
         VStack(alignment: .leading, spacing: 10) {
           if model.isRefreshing || !model.hasLoaded { ProgressView().controlSize(.small) }
           else { Image(systemName: "display").foregroundStyle(.secondary) }
           Text(emptyMessage).font(.callout).foregroundStyle(.secondary)
           if model.hasLoaded && !model.isRefreshing && model.error == nil {
-            Text("接上外屏后刷新。这里仅显示外屏和 Lite 保存的恢复入口。")
+            Text("接上屏幕后刷新。这里显示可用屏幕和 Lite 保存的恢复入口。")
               .font(.system(size: 12)).foregroundStyle(.secondary)
           }
         }.padding(.vertical, 22)
-      } else if model.rows.count <= 3 {
+      } else if model.rows.count + model.builtInDisplays.count <= 2 {
         displayRows
       } else {
-        ScrollView { displayRows }.frame(height: 330)
+        ScrollView { displayRows.padding(.trailing, 10) }.frame(height: 400)
       }
 
       Divider().padding(.top, 12)
       HStack(spacing: 16) {
-        Button { showsHelp.toggle() } label: { Label("连接说明", systemImage: "questionmark.circle") }
-          .buttonStyle(.borderless).accessibilityLabel("连接操作说明")
+        Button { showsHelp.toggle() } label: { Label("使用说明", systemImage: "questionmark.circle") }
+          .buttonStyle(.borderless).accessibilityLabel("亮度与连接操作说明")
           .popover(isPresented: $showsHelp) {
             VStack(alignment: .leading, spacing: 10) {
               Text("DisplayDJ Lite").font(.headline)
               Text("版本 \(LiteIdentity.version)").font(.caption).foregroundStyle(.secondary)
               Divider()
+              Text("内建屏调节原生背光，支持的外屏通过 DDC 调节硬件亮度。不支持时会说明原因，不会自动改用软件调暗。")
               Text(isPreview ? "当前示例全部虚构。操作只改变模拟数据，不代表真实连接结果。" :
                 "断开后，窗口会移到其他在线屏幕；这不等于关闭显示器电源，也不会切换它的输入源。")
               Text(isPreview ? "关闭演示后，模拟数据会重置，不写入真实恢复记录。" : "退出前会恢复并确认外屏；失败会取消退出并保留记录。卸载或覆盖安装前请先恢复并退出。")
@@ -77,7 +80,7 @@ struct LiteView: View {
           }
         Spacer()
         Button("退出", action: quit)
-          .buttonStyle(.borderless)
+          .buttonStyle(LiteQuitButtonStyle())
           .disabled(!model.canQuit)
           .accessibilityLabel("退出 DisplayDJ Lite")
           .keyboardShortcut("q", modifiers: .command)
@@ -95,7 +98,8 @@ struct LiteView: View {
     let online = model.rows.filter(\.isOnline).count
     let offline = model.rows.filter { !$0.isOnline && !$0.requiresRediscovery }.count
     let historical = model.rows.filter(\.requiresRediscovery).count
-    let current = offline == 0 ? "\(online) 台外屏已连接" : "\(online) 台已连接 · \(offline) 台待恢复"
+    let prefix = model.builtInDisplays.isEmpty ? "" : "\(model.builtInDisplays.count) 台内建屏 · "
+    let current = prefix + (offline == 0 ? "\(online) 台外屏已连接" : "\(online) 台外屏在线 · \(offline) 台待恢复")
     return historical == 0 ? current : current + " · \(historical) 条未接入记录"
   }
 
@@ -107,11 +111,34 @@ struct LiteView: View {
 
   private var displayRows: some View {
     VStack(spacing: 0) {
+      if let brightness = model.brightness {
+        ForEach(model.builtInDisplays, id: \.runtimeID) { display in
+          VStack(alignment: .leading, spacing: 9) {
+            Label(display.name, systemImage: "laptopcomputer").font(.system(size: 13, weight: .medium))
+            if let id = LiteIdentity.stableID(display.stableID) {
+              LiteBrightnessControls(model: model, brightness: brightness, id: id, name: display.name)
+            } else {
+              Text("无法确认屏幕身份，请刷新后重试。").font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            Text("内建屏仅调节亮度").font(.system(size: 11)).foregroundStyle(.secondary)
+          }.padding(.vertical, 15)
+          if !model.rows.isEmpty { Divider() }
+        }
+      }
       ForEach(Array(model.rows.enumerated()), id: \.element.id) { index, row in
         if index > 0 { Divider() }
         LiteDisplayRowView(model: model, row: row, isPreview: isPreview, perform: perform)
       }
     }
+  }
+}
+
+/// Read-only refreshes briefly lock exit while records are checked. Keep this
+/// quiet action visually stable instead of flashing its text on every read.
+private struct LiteQuitButtonStyle: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label.foregroundStyle(Color.secondary)
+      .opacity(configuration.isPressed ? 0.55 : 1)
   }
 }
 
@@ -162,8 +189,11 @@ private struct LiteDisplayRowView: View {
       }
       if let explanation = row.refusal ?? failure {
         Label((isPreview ? "模拟提示：" : "") + explanation, systemImage: "exclamationmark.circle")
-          .font(.system(size: 12)).foregroundStyle(failure == nil ? Color.secondary : Color.orange)
+          .font(.system(size: 12)).foregroundStyle(failure == nil ? Color.secondary : LiteFeedbackColor.warning(for: colorScheme))
           .fixedSize(horizontal: false, vertical: true)
+      }
+      if row.isOnline, let id = row.stableID, let brightness = model.brightness {
+        LiteBrightnessControls(model: model, brightness: brightness, id: id, name: row.name)
       }
     }.padding(.vertical, 15)
   }
@@ -178,7 +208,7 @@ private struct LiteDisplayRowView: View {
   }
 
   private var statusColor: Color {
-    if pending { return .orange }
+    if pending { return LiteFeedbackColor.warning(for: colorScheme) }
     if failure != nil || row.refusal != nil { return .secondary }
     return row.isOnline ? .green : .secondary
   }
@@ -201,5 +231,11 @@ private struct LiteDisplayRowView: View {
       return failure == nil ? "重新连接" : "重试连接"
     }
     return failure == nil ? "断开" : "重试断开"
+  }
+}
+
+enum LiteFeedbackColor {
+  static func warning(for scheme: ColorScheme) -> Color {
+    scheme == .dark ? .orange : Color(red: 146.0 / 255, green: 70.0 / 255, blue: 0)
   }
 }

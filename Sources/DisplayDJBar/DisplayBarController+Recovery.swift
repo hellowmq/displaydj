@@ -9,12 +9,26 @@ private let hotkeySettingsLogger = Logger(
 // MARK: - Hotkey opt-in
 
 extension DisplayBarController {
+  var keyboardSummary: String? {
+    guard hotkeysEnabled || mediaKeysEnabled else { return nil }
+    if !hasAccessibilityPermission { return "键盘控制待授权" }
+    let shortcutWorks = hotkeysEnabled && hotkeys.isObservingGlobally
+    let mediaWorks = mediaKeysEnabled && mediaKeysStatus == .active
+    if !shortcutWorks && !mediaWorks { return "键盘监听未建立" }
+    if (hotkeysEnabled && !shortcutWorks) || (mediaKeysEnabled && !mediaWorks) {
+      return "部分键盘控制不可用"
+    }
+    if hotkeyTarget == .mouse { return "按键目标：鼠标所在屏幕" }
+    return "按键目标：" + (selectedDisplay.map { alias(for: $0) } ?? "尚未选择显示器")
+  }
+
   var hotkeyDisplayName: String {
     BrightnessHotkey.displayName
   }
 
   /// Turns the keyboard observers on or off and persists the choice.
   func setHotkeysEnabled(_ enabled: Bool) {
+    guard !isInteractionPreview else { return }
     let wasEnabled = hotkeys.isEnabled
     hotkeys.setEnabled(enabled)
     hotkeysEnabled = hotkeys.isEnabled
@@ -31,12 +45,13 @@ extension DisplayBarController {
   }
 
   func setHotkeyTarget(_ target: BrightnessHotkeyTarget) {
-    BrightnessHotkeyTargetPreference().target = target
+    if !isInteractionPreview { BrightnessHotkeyTargetPreference().target = target }
     hotkeyTarget = target
     hotkeySettingsLogger.info("brightness hotkey target changed mode=\(target.rawValue, privacy: .public)")
   }
 
   func setMediaKeysEnabled(_ enabled: Bool) {
+    guard !isInteractionPreview else { return }
     let wasEnabled = mediaKeys.isEnabled
     mediaKeys.setEnabled(enabled)
     mediaKeysEnabled = enabled
@@ -84,12 +99,14 @@ extension DisplayBarController {
   /// the shortcut it described was left broken: the app knew trust had been granted, said so by
   /// removing its own explanation, and did the one thing that would have acted on it nowhere.
   func refreshAccessibilityPermission() {
+    guard !isInteractionPreview else { return }
     hasAccessibilityPermission = hotkeys.reconcileObservers()
     mediaKeys.reconcile()
   }
 
   /// Requests the system-owned permission prompt after an explicit user action.
   func requestAccessibilityPermission() {
+    guard !isInteractionPreview else { return }
     hasAccessibilityPermission = hotkeys.requestAccessibilityPermission()
     mediaKeys.reconcile()
   }

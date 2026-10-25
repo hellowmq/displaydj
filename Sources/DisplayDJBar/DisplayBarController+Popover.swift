@@ -46,12 +46,14 @@ extension DisplayBarController {
 
     // Brightness hotkeys are opt-in. Nothing observes the keyboard until the user
     // enables them, so ⌘= / ⌘- keep their meaning in every other app.
+    if !isInteractionPreview {
     hotkeys.activateStoredPreference()
     hotkeysEnabled = hotkeys.isEnabled
     keyboardFeedbackPresenter = { [weak self] in self?.brightnessHUD.show($0) }
     mediaKeys.activateStoredPreference()
     mediaKeysEnabled = mediaKeys.isEnabled
     refreshAccessibilityPermission()
+    }
     applicationActivationObserver = NotificationCenter.default.addObserver(
       forName: NSApplication.didBecomeActiveNotification,
       object: nil,
@@ -71,11 +73,11 @@ extension DisplayBarController {
       }
       wakeObservers.append(observer)
     }
-    startConnectionAutoRelease()
+    if !isInteractionPreview { startConnectionAutoRelease() }
     // Whether disconnecting is possible at all is settled here rather than on
     // first use: it never changes while the app runs, and discovering it late
     // would leave the control looking available until the first tap failed.
-    connectionSupported = probeConnectionSupport()
+    connectionSupported = isInteractionPreview || probeConnectionSupport()
     refreshDisconnectedDisplays()
     loadPreferences()
     screenParametersObserver = NotificationCenter.default.addObserver(
@@ -98,6 +100,21 @@ extension DisplayBarController {
       guard !Task.isCancelled, let self else { return }
       await self.scanAndRefresh()
     }
+  }
+
+  /// Explicit review window; normal startup remains a menu-bar application.
+  func showPanelWindow() {
+    let content = NSHostingController(rootView: DisplayBarView(controller: self))
+    content.sizingOptions = [.preferredContentSize]
+    let window = NSWindow(contentViewController: content)
+    window.title = isInteractionPreview ? "DisplayDJ · 模拟演示" : "DisplayDJ"
+    window.styleMask = [.titled, .closable]
+    window.isReleasedWhenClosed = false
+    window.delegate = NSApp.delegate as? any NSWindowDelegate
+    panelWindow = window
+    window.center(); window.makeKeyAndOrderFront(nil)
+    NSApp.activate(ignoringOtherApps: true)
+    popoverDidShow(Notification(name: NSPopover.didShowNotification))
   }
 
   // MARK: - Popover

@@ -41,14 +41,46 @@ final class LiteModel: ObservableObject {
   @Published private(set) var pendingRecoveryCount = 0
   @Published private(set) var isRestoringBeforeQuit = false
   @Published private(set) var quitRecoveryFailed = false
+  @Published private(set) var builtInDisplays: [DisplayDescriptor] = []
+  @Published private(set) var isRefreshingFromToolbar = false
+  let brightness: LiteBrightnessModel?
+  private var brightnessUpdates: AnyCancellable?
+  private var hasFreshTopology = false
   var notices: [String: String] { feedback.mapValues(\.message) }
   private let access: any LiteConnectionAccess
   private var refreshAgain = false
   private var rowOrder: [String: Int] = [:]
-  var isBusy: Bool { isRefreshing || busyID != nil || isRestoringBeforeQuit }
+  var isBusy: Bool { isRefreshing || busyID != nil || isRestoringBeforeQuit || brightness?.isWorking == true }
   var canQuit: Bool { !isBusy }
 
-  init(access: any LiteConnectionAccess) { self.access = access }
+  init(access: any LiteConnectionAccess, brightnessAccess: (any LiteBrightnessAccess)? = nil) {
+    self.access = access
+    brightness = brightnessAccess.map { LiteBrightnessModel(access: $0) }
+    brightnessUpdates = brightness?.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
+  }
+
+  /// Acceptance is separate from the success/failure of individual device reads.
+  @discardableResult func refreshFromToolbar() async -> Bool {
+    guard !isBusy else { return false }
+    isRefreshingFromToolbar = true
+    defer { isRefreshingFromToolbar = false }
+    await refresh()
+    return true
+  }
+
+  func setBrightness(_ value: Int, for id: String) async {
+    guard hasFreshTopology, !isRefreshing, busyID == nil, !isRestoringBeforeQuit else { return }
+    await brightness?.set(value, for: id)
+  }
+
+  func canRereadBrightness(_ id: String) -> Bool {
+    hasFreshTopology && !isBusy && brightness?.canReread(id) == true
+  }
+
+  func rereadBrightness(_ id: String) async {
+    guard canRereadBrightness(id) else { return }
+    await brightness?.reread(id)
+  }
 
   func refresh() async {
     guard !isRestoringBeforeQuit else { refreshAgain = true; return }
@@ -66,6 +98,9 @@ final class LiteModel: ObservableObject {
         let fresh = Self.rows(from: snapshot, unavailableReason: access.unavailableReason)
         for row in fresh where rowOrder[row.id] == nil { rowOrder[row.id] = rowOrder.count }
         rows = fresh.sorted { rowOrder[$0.id, default: 0] < rowOrder[$1.id, default: 0] }
+        hasFreshTopology = true
+        builtInDisplays = brightness == nil ? [] : snapshot.displays.filter { $0.isBuiltIn }
+        await brightness?.refresh(displays: snapshot.displays)
         for row in rows {
           if case .confirmed(let state) = feedback[row.id],
              (state == .connected) != row.isOnline { feedback[row.id] = nil }
@@ -73,6 +108,8 @@ final class LiteModel: ObservableObject {
         error = access.unavailableReason
         if pendingRecoveryCount == 0, error == nil, !isRestoringBeforeQuit { quitRecoveryFailed = false }
       } catch {
+        hasFreshTopology = false
+        brightness?.invalidate()
         if let coded = error as? DisplayDJError, coded.details["phase"] == "record-load" {
           self.error = "恢复记录无法读取，已暂停操作。记录仍保留，请刷新重试。"
         } else {

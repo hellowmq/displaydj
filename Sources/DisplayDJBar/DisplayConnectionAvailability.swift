@@ -13,6 +13,7 @@ enum DisplayConnectionAvailability: Equatable {
   case available
   /// The private entry point is missing, so no amount of asking will work.
   case unsupported
+  case unidentified
   case builtInDisplay
   /// Disconnecting a mirrored display changes the mirror set instead.
   case mirroredDisplay
@@ -31,6 +32,8 @@ enum DisplayConnectionAvailability: Equatable {
     switch self {
     case .available:
       nil
+    case .unidentified:
+      "屏幕身份、类型或恢复记录未确认，请刷新后重试。"
     case .unsupported:
       "这台 Mac 没有提供停止显示器输出所需的系统接口。"
     case .builtInDisplay:

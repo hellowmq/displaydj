@@ -29,6 +29,10 @@ enum DisplayConnectionList {
   /// outcome looks it up by the same one. A display with no stable ID has no
   /// other identity here, so the runtime key is the only thing both sides can
   /// name.
+  static func key(for record: DisplayConnectionRecord) -> String {
+    record.stableID ?? key(for: record.runtimeID)
+  }
+
   static func key(for runtimeID: UInt32) -> String {
     DisplaySelection.runtimeKeyPrefix + String(runtimeID)
   }

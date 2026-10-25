@@ -155,7 +155,7 @@ struct LiteConnectionService: LiteConnectionAccess {
 
   static func refusal(for display: DisplayDescriptor, in displays: [DisplayDescriptor],
                       disconnecting: Bool = true) -> String? {
-    if display.isBuiltIn { return "Lite 仅控制外接显示器。" }
+    if display.isBuiltIn { return "内建屏仅提供亮度调节，不能从这里断开。" }
     if display.isVirtual != false { return "虚拟屏或类型未确认，暂不提供连接控制。" }
     guard let id = LiteIdentity.stableID(display.stableID),
           displays.filter({ LiteIdentity.stableID($0.stableID) == id }).count == 1 else {

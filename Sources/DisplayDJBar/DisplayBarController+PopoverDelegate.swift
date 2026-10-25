@@ -11,6 +11,9 @@ extension DisplayBarController: NSPopoverDelegate {
         guard let self,
           self.refreshTimer != nil,
           !self.isWriting,
+          !self.isChangingConnection,
+          !self.isRestoringConnections,
+          !self.isCheckingQuit,
           !self.isReading,
           !self.intents.hasPending,
           !self.intents.isDraining
@@ -30,6 +33,7 @@ extension DisplayBarController: NSPopoverDelegate {
   }
 
   func popoverDidClose(_ notification: Notification) {
+    guard panelWindow?.isVisible != true else { return }
     refreshTimer?.invalidate()
     refreshTimer = nil
     refreshTask?.cancel()

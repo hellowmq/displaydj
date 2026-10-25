@@ -3,6 +3,7 @@ import Darwin
 import OSLog
 import SwiftUI
 import VibeDisplayCore
+import DisplayDJCore
 
 private let softwareDimmingLogger = Logger(
     subsystem: "io.github.hellowmq.displaydj", category: "SoftwareDimming"
@@ -12,6 +13,9 @@ private let softwareDimmingLogger = Logger(
 /// failure handling stay identical to scripts. Each call is a separate process.
 private enum DisplayToolsClient {
     static func request<T: Decodable & Sendable>(_ type: T.Type, _ arguments: [String]) async throws -> T {
+        guard !CommandLine.arguments.contains("--interaction-preview") else {
+            throw VibeError(.ioFailure, "模拟演示未调用本机设置；请在真实实例中查看此页。")
+        }
         let executable = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/display-cli")
         let bytes = try await Task.detached {
             guard FileManager.default.isExecutableFile(atPath: executable.path) else {
@@ -68,6 +72,9 @@ private final class ModeGuardSession: @unchecked Sendable {
 
 private enum ModeGuardClient {
     static func start(modeID: Int32, selector: String) async throws -> (DisplayModeChange, ModeGuardSession) {
+        guard !CommandLine.arguments.contains("--interaction-preview") else {
+            throw VibeError(.ioFailure, "模拟演示未调用本机设置；请在真实实例中查看此页。")
+        }
         let executable = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/display-cli")
         return try await Task.detached {
             guard FileManager.default.isExecutableFile(atPath: executable.path) else {
@@ -117,6 +124,10 @@ private enum ModeGuardClient {
     }
 }
 
+enum DisplayToolsSection: Hashable { case display, profiles, preferences }
+private enum ToolsFeedbackScope: Hashable { case display, mode, controls, gamma, profiles, profile(String) }
+private struct ToolsOperationNotice { var message = ""; var failed = false }
+
 struct DisplayToolsView: View {
     @ObservedObject var controller: DisplayBarController
     private struct PendingModeConfirmation: Identifiable {
@@ -129,6 +140,7 @@ struct DisplayToolsView: View {
     @State private var displays: [DisplayModeReport] = []
     @State private var selectedDisplay = ""
     @State private var selectedMode: Int32 = -1
+    @State private var deferredDisplayID: String?
     @State private var profiles: [DisplayProfile] = []
     @State private var profileName = ""
     @State private var controls: [MonitorControlResult] = []
@@ -138,8 +150,16 @@ struct DisplayToolsView: View {
     @State private var softwareDimmingNeedsService = false
     @State private var softwareDimmingHasIncompatibleService = false
     @State private var busy = false
-    @State private var notice = ""
-    @State private var failed = false
+    @State private var notices: [ToolsFeedbackScope: ToolsOperationNotice] = [:]
+    @State private var feedbackScope: ToolsFeedbackScope = .display
+    private var notice: String {
+        get { notices[feedbackScope]?.message ?? "" }
+        nonmutating set { notices[feedbackScope, default: .init()].message = newValue }
+    }
+    private var failed: Bool {
+        get { notices[feedbackScope]?.failed ?? false }
+        nonmutating set { notices[feedbackScope, default: .init()].failed = newValue }
+    }
     @State private var pendingMode: PendingModeConfirmation?
     @State private var modeGuardSession: ModeGuardSession?
     @State private var modeAlertTimeoutTask: Task<Void, Never>?
@@ -164,27 +184,27 @@ struct DisplayToolsView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("显示设置与预设").font(.title2.weight(.semibold))
-                    Text("调整显示模式、画面与亮度预设").font(.callout).foregroundStyle(.secondary)
+                    Text("DisplayDJ 设置").font(.title2.weight(.semibold))
+                    Text("显示器、亮度预设与操作偏好").font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer()
                 if busy || controller.isPreparingBrightnessSync { ProgressView().controlSize(.small) }
                 Button("刷新") { perform { try await reload() } }.disabled(busy)
             }
-            TabView {
+            if controller.isInteractionPreview {
+                Text("模拟预览：不读取或修改本机显示设置；全局按键与权限操作不可用。")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            TabView(selection: $controller.toolsSection) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         Picker("显示器", selection: $selectedDisplay) {
                             ForEach(displays, id: \.displayUUID) { report in Text(report.slug).tag(report.displayUUID) }
                         }.onChange(of: selectedDisplay) { _ in
-                            if let target = controller.displays.first(where: {
-                                $0.stableID?.lowercased() == "uuid:\(selectedDisplay.lowercased())"
-                            }) {
-                                controller.selectDisplay(key: target.selectionKey)
-                            }
                             selectedMode = display?.current.id ?? -1
                             controls = []
-                            notice = ""
+                            for scope in [ToolsFeedbackScope.display, .mode, .controls, .gamma] { notices[scope] = nil }
                             softwareDimmingReadError = ""
                             softwareDimmingNeedsService = false
                             softwareDimmingHasIncompatibleService = false
@@ -192,12 +212,147 @@ struct DisplayToolsView: View {
                             guard !displayUUID.isEmpty else { return }
                             softwareDimmingLevels.invalidate(displayUUID)
                             confirmedSoftwareDimmingLevels.invalidate(displayUUID)
-                            perform { await refreshSoftwareDimming(for: displayUUID) }
+                            perform(scope: .gamma) { await refreshSoftwareDimming(for: displayUUID) }
                         }
-                        if displays.count > 1 {
+                        if let display {
+                            ToolsSection("分辨率与刷新率") {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("当前：\(modeLabel(display.current))")
+                                    Picker("切换至", selection: $selectedMode) {
+                                        ForEach(display.modes.filter(\.usable)) { mode in Text(modeLabel(mode)).tag(mode.id) }
+                                    }
+                                    HStack {
+                                        Text("应用后需在 15 秒内确认，否则恢复原模式").font(.callout).foregroundStyle(.secondary)
+                                        Spacer()
+                                        Button("应用并确认") { perform(scope: .mode) {
+                                            let (result, session) = try await ModeGuardClient.start(modeID: selectedMode, selector: selector)
+                                            let pending = PendingModeConfirmation(
+                                                displayUUID: result.displayUUID,
+                                                previousID: result.previous.id,
+                                                requestedID: result.requested.id)
+                                            modeGuardSession = session
+                                            pendingMode = pending
+                                            scheduleModeAlertTimeout(for: pending)
+                                            notice = "新模式已应用；15 秒内确认，否则自动恢复"
+                                        } }.disabled(selectedMode < 0 || selectedMode == display.current.id || !display.modes.contains(where: { $0.id == selectedMode && $0.usable }))
+                                    }
+                                }
+                            }
+                            operationNotice(.mode)
+                            if selectedPanelSupportsDDCControls {
+                                ToolsSection("显示器音量与对比度") {
+                                    VStack(alignment: .leading, spacing: 12) {
+                                        HStack {
+                                            Text("逐项读取显示器的 DDC/CI 支持；不支持的控制项会保持禁用。")
+                                                .font(.callout).foregroundStyle(.secondary)
+                                            Spacer()
+                                            Button("读取控制项") { perform(scope: .controls) { try await loadControls() } }
+                                        }
+                                        ForEach(controls, id: \.control) { result in
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                HStack {
+                                                    Text(result.control == .volume ? "音量" : "对比度")
+                                                    Spacer()
+                                                    Text(result.value.map { "\(Int(($0 * 100).rounded()))%" }
+                                                        ?? (result.errorCode == "unsupported" ? "不支持" : "不可读取"))
+                                                    Button("−5%") { adjust(result.control, "-5%") }.disabled(!result.ok)
+                                                    Button("+5%") { adjust(result.control, "+5%") }.disabled(!result.ok)
+                                                }
+                                                if let error = result.error { Text(error).font(.callout).foregroundStyle(.secondary).textSelection(.enabled) }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            operationNotice(.controls)
+                            ToolsSection("软件调光 · Gamma") {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("只改变画面颜色，不改变背光。打开窗口或切换显示器时自动读取；松开滑块即应用。不需要辅助功能权限。")
+                                        .font(.callout).foregroundStyle(.secondary)
+                                    if softwareDimmingNeedsService && !softwareDimmingHasIncompatibleService {
+                                        Button("启用软件调光") { perform(scope: .gamma) {
+                                            let status = try await DisplayToolsClient.request(ToolsDaemonStartPayload.self,
+                                                ["serve", "--detach"])
+                                            guard status.running else {
+                                                throw VibeError(.daemonUnavailable, "本地调光服务没有启动")
+                                            }
+                                            try await loadSoftwareDimming(for: selectedDisplay)
+                                            notice = "软件调光已就绪，可单独设置每台显示器"
+                                        } }
+                                    }
+                                    HStack {
+                                        Slider(value: softwareDimmingBinding, in: 8...100, step: 1,
+                                               onEditingChanged: { editing in
+                                            if !editing { applySoftwareDimmingFromSlider() }
+                                        })
+                                            .accessibilityLabel("软件调光强度")
+                                            .disabled(softwareDimmingValue == nil)
+                                        Text(softwareDimmingValue.map { "\(Int($0.rounded()))%" } ?? "未读取")
+                                            .monospacedDigit().frame(minWidth: 52)
+                                    }
+                                    if !softwareDimmingReadError.isEmpty {
+                                        Text(softwareDimmingReadError)
+                                            .font(.callout).foregroundStyle(.secondary)
+                                            .textSelection(.enabled)
+                                    }
+                                    HStack {
+                                        Button("关闭并恢复颜色") { perform(scope: .gamma) {
+                                            let targetUUID = selectedDisplay
+                                            let response = try await DisplayToolsClient.request(ToolsApplyPayload.self,
+                                                ["dimming", "off", "--display", "uuid:\(targetUUID)"])
+                                            try Self.checkResults(response.results, expectedUUID: targetUUID)
+                                            softwareDimmingLevels.set(100, for: targetUUID)
+                                            confirmedSoftwareDimmingLevels.set(100, for: targetUUID)
+                                            softwareDimmingLogger.info("software dimming restored displayIndex=\(displays.firstIndex(where: { $0.displayUUID == targetUUID }) ?? -1)")
+                                            notice = "已恢复系统颜色"
+                                        } }
+                                    }
+                                }
+                            }
+                            operationNotice(.gamma)
+                        } else { Text("没有可用显示模式，请刷新或运行 display-cli doctor。").foregroundStyle(.secondary) }
+                        operationNotice(.display)
+                    }.padding(16)
+                }.tabItem { Label("显示器", systemImage: "display") }.tag(DisplayToolsSection.display)
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("保存所有在线显示器的亮度和控制方式。预演只检查将应用的设置，不修改显示器。").font(.callout).foregroundStyle(.secondary)
+                        HStack {
+                            TextField("预设名称（中文、英文、数字、- 或 _）", text: $profileName)
+                            Button("保存当前亮度") { perform(scope: .profiles) {
+                                _ = try await DisplayToolsClient.request(DisplayProfile.self, ["profile", "save", profileName])
+                                try await reload()
+                                notice = "已保存亮度预设 \(profileName)"
+                            } }.disabled(profileName.isEmpty)
+                        }
+                        operationNotice(.profiles)
+                        if profiles.isEmpty { Text("还没有亮度预设").foregroundStyle(.secondary).padding(.vertical, 16) }
+                        ForEach(profiles, id: \.name) { profile in
+                            GroupBox {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text(profile.name).font(.headline)
+                                        Spacer()
+                                        Button("预演") { applyProfile(profile.name, dryRun: true) }
+                                        Button("应用") { applyProfile(profile.name, dryRun: false) }
+                                    }
+                                    ForEach(profile.displays, id: \.displayUUID) { entry in
+                                        Text("\(entry.name) · \(Int((entry.brightness * 100).rounded()))% · \(entry.transport == .gamma ? "软件调光" : "硬件亮度")")
+                                            .font(.callout).foregroundStyle(.secondary)
+                                    }
+                                    operationNotice(.profile(profile.name))
+                                }.padding(8)
+                            }
+                        }
+                    }.padding(16)
+                }.tabItem { Label("亮度预设", systemImage: "slider.horizontal.3") }.tag(DisplayToolsSection.profiles)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        if controller.displays.count > 1 {
                             ToolsSection("多显示器亮度") {
                                 VStack(alignment: .leading, spacing: 12) {
-                                    Text("此处选中的显示器也是快捷键「选中的显示器」目标。")
+                                    Text("滚轮目标在主面板选择；按键目标由下方策略决定，设置页选屏不改变滚轮目标。")
                                         .font(.callout).foregroundStyle(.secondary)
                                     Toggle("同步调节硬件亮度", isOn: Binding(
                                         get: { controller.isBrightnessSyncEnabled },
@@ -226,149 +381,34 @@ struct DisplayToolsView: View {
                         }
                         ToolsSection("亮度快捷键") {
                             HotkeySettingsRow(controller: controller, compact: false)
+                                .disabled(controller.isInteractionPreview)
                         }
-                        if let display {
-                            ToolsSection("分辨率与刷新率") {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    Text("当前：\(modeLabel(display.current))")
-                                    Picker("切换至", selection: $selectedMode) {
-                                        ForEach(display.modes.filter(\.usable)) { mode in Text(modeLabel(mode)).tag(mode.id) }
-                                    }
-                                    HStack {
-                                        Text("应用后需在 15 秒内确认，否则恢复原模式").font(.callout).foregroundStyle(.secondary)
-                                        Spacer()
-                                        Button("应用并确认") { perform {
-                                            let (result, session) = try await ModeGuardClient.start(modeID: selectedMode, selector: selector)
-                                            let pending = PendingModeConfirmation(
-                                                displayUUID: result.displayUUID,
-                                                previousID: result.previous.id,
-                                                requestedID: result.requested.id)
-                                            modeGuardSession = session
-                                            pendingMode = pending
-                                            scheduleModeAlertTimeout(for: pending)
-                                            notice = "新模式已应用；15 秒内确认，否则自动恢复"
-                                        } }.disabled(selectedMode < 0 || selectedMode == display.current.id || !display.modes.contains(where: { $0.id == selectedMode && $0.usable }))
-                                    }
-                                }
-                            }
-                            if selectedPanelSupportsDDCControls {
-                                ToolsSection("显示器音量与对比度") {
-                                    VStack(alignment: .leading, spacing: 12) {
-                                        HStack {
-                                            Text("逐项读取显示器的 DDC/CI 支持；不支持的控制项会保持禁用。")
-                                                .font(.callout).foregroundStyle(.secondary)
-                                            Spacer()
-                                            Button("读取控制项") { perform { try await loadControls() } }
-                                        }
-                                        ForEach(controls, id: \.control) { result in
-                                            VStack(alignment: .leading, spacing: 4) {
-                                                HStack {
-                                                    Text(result.control == .volume ? "音量" : "对比度")
-                                                    Spacer()
-                                                    Text(result.value.map { "\(Int(($0 * 100).rounded()))%" }
-                                                        ?? (result.errorCode == "unsupported" ? "不支持" : "不可读取"))
-                                                    Button("−5%") { adjust(result.control, "-5%") }.disabled(!result.ok)
-                                                    Button("+5%") { adjust(result.control, "+5%") }.disabled(!result.ok)
-                                                }
-                                                if let error = result.error { Text(error).font(.callout).foregroundStyle(.secondary).textSelection(.enabled) }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            ToolsSection("软件调光 · Gamma") {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    Text("只改变画面颜色，不改变背光。打开窗口或切换显示器时自动读取；松开滑块即应用。不需要辅助功能权限。")
-                                        .font(.callout).foregroundStyle(.secondary)
-                                    if softwareDimmingNeedsService && !softwareDimmingHasIncompatibleService {
-                                        Button("启用软件调光") { perform {
-                                            let status = try await DisplayToolsClient.request(ToolsDaemonStartPayload.self,
-                                                ["serve", "--detach"])
-                                            guard status.running else {
-                                                throw VibeError(.daemonUnavailable, "本地调光服务没有启动")
-                                            }
-                                            try await loadSoftwareDimming(for: selectedDisplay)
-                                            notice = "软件调光已就绪，可单独设置每台显示器"
-                                        } }
-                                    }
-                                    HStack {
-                                        Slider(value: softwareDimmingBinding, in: 8...100, step: 1,
-                                               onEditingChanged: { editing in
-                                            if !editing { applySoftwareDimmingFromSlider() }
-                                        })
-                                            .accessibilityLabel("软件调光强度")
-                                            .disabled(softwareDimmingValue == nil)
-                                        Text(softwareDimmingValue.map { "\(Int($0.rounded()))%" } ?? "未读取")
-                                            .monospacedDigit().frame(minWidth: 52)
-                                    }
-                                    if !softwareDimmingReadError.isEmpty {
-                                        Text(softwareDimmingReadError)
-                                            .font(.callout).foregroundStyle(.secondary)
-                                            .textSelection(.enabled)
-                                    }
-                                    HStack {
-                                        Button("关闭并恢复颜色") { perform {
-                                            let targetUUID = selectedDisplay
-                                            let response = try await DisplayToolsClient.request(ToolsApplyPayload.self,
-                                                ["dimming", "off", "--display", "uuid:\(targetUUID)"])
-                                            try Self.checkResults(response.results, expectedUUID: targetUUID)
-                                            softwareDimmingLevels.set(100, for: targetUUID)
-                                            confirmedSoftwareDimmingLevels.set(100, for: targetUUID)
-                                            softwareDimmingLogger.info("software dimming restored displayIndex=\(displays.firstIndex(where: { $0.displayUUID == targetUUID }) ?? -1)")
-                                            notice = "已恢复系统颜色"
-                                        } }
-                                    }
-                                }
-                            }
-                        } else { Text("没有可用显示模式，请刷新或运行 display-cli doctor。").foregroundStyle(.secondary) }
-                    }.padding(16)
-                }.tabItem { Label("显示设置", systemImage: "display") }
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("保存所有在线显示器的亮度和控制方式；应用前先检查目标是否在线。").font(.callout).foregroundStyle(.secondary)
-                        HStack {
-                            TextField("预设名称（中文、英文、数字、- 或 _）", text: $profileName)
-                            Button("保存当前亮度") { perform {
-                                _ = try await DisplayToolsClient.request(DisplayProfile.self, ["profile", "save", profileName])
-                                try await reload()
-                                notice = "已保存亮度预设 \(profileName)"
-                            } }.disabled(profileName.isEmpty)
-                        }
-                        if profiles.isEmpty { Text("还没有亮度预设").foregroundStyle(.secondary).padding(.vertical, 16) }
-                        ForEach(profiles, id: \.name) { profile in
-                            GroupBox {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Text(profile.name).font(.headline)
-                                        Spacer()
-                                        Button("预演") { applyProfile(profile.name, dryRun: true) }
-                                        Button("应用") { applyProfile(profile.name, dryRun: false) }
-                                    }
-                                    ForEach(profile.displays, id: \.displayUUID) { entry in
-                                        Text("\(entry.name) · \(Int((entry.brightness * 100).rounded()))% · \(entry.transport == .gamma ? "软件调光" : "硬件亮度")")
-                                            .font(.callout).foregroundStyle(.secondary)
-                                    }
-                                }.padding(8)
-                            }
-                        }
+                        Text("操作偏好对所有显示器生效；打开设置不会请求辅助功能权限。")
+                          .font(.callout).foregroundStyle(.secondary)
                     }.padding(16)
-                }.tabItem { Label("亮度预设", systemImage: "slider.horizontal.3") }
+                }.tabItem { Label("操作偏好", systemImage: "keyboard") }.tag(DisplayToolsSection.preferences)
             }.disabled(busy)
-            Divider()
-            ScrollView(.vertical) {
-                Text(notice)
-                    .font(.callout)
-                    .foregroundStyle(failed ? Color.red : Color.secondary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(height: 36)
-            .accessibilityLabel("操作状态")
+
         }.padding(24).frame(minWidth: 660, minHeight: 520)
-        .task { perform { try await reload() } }
+        .task {
+            if controller.toolsSection != .preferences { perform { try await reload() } }
+        }
+        .onChange(of: controller.toolsSection) { section in
+            if section != .preferences && displays.isEmpty && !busy { perform { try await reload() } }
+        }
+        .onChange(of: controller.requestedToolsDisplayID) { id in
+            if busy { deferredDisplayID = id; return }
+            selectRequestedDisplay(id)
+        }
+        .onChange(of: busy) { isBusy in
+            if !isBusy, let pending = deferredDisplayID {
+                deferredDisplayID = nil
+                selectRequestedDisplay(pending)
+            }
+        }
         .onChange(of: controller.selectedStableID) { stableID in
-            guard let stableID, let match = displays.first(where: {
+            guard !busy, let stableID, let match = displays.first(where: {
                 "uuid:\($0.displayUUID)".caseInsensitiveCompare(stableID) == .orderedSame
             }), selectedDisplay != match.displayUUID else { return }
             selectedDisplay = match.displayUUID
@@ -401,8 +441,9 @@ struct DisplayToolsView: View {
         session.decide("keep")
         modeGuardSession = nil
         pendingMode = nil
+        feedbackScope = .mode
         notice = "正在确认显示模式…"
-        perform {
+        perform(scope: .mode) {
             let status = await Task.detached { session.process.waitUntilExit(); return session.process.terminationStatus }.value
             let reports = try await DisplayToolsClient.request(ToolsModesPayload.self,
                 ["modes", "list", "--display", "uuid:\(pending.displayUUID)"]).displays
@@ -421,7 +462,7 @@ struct DisplayToolsView: View {
         session.decide("restore")
         modeGuardSession = nil
         pendingMode = nil
-        perform {
+        perform(scope: .mode) {
             let status = await Task.detached { session.process.waitUntilExit(); return session.process.terminationStatus }.value
             guard status == 0 else { throw VibeError(.backendFailure, "自动恢复失败；请检查当前分辨率") }
             let reports = try await DisplayToolsClient.request(ToolsModesPayload.self,
@@ -434,6 +475,20 @@ struct DisplayToolsView: View {
         }
     }
 
+    @ViewBuilder private func operationNotice(_ scope: ToolsFeedbackScope) -> some View {
+        if let entry = notices[scope], !entry.message.isEmpty {
+            Label(entry.message, systemImage: entry.failed ? "exclamationmark.triangle" : "info.circle")
+                .font(.callout).foregroundStyle(entry.failed ? Color.orange : Color.secondary)
+                .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading).accessibilityLabel("操作状态：" + entry.message)
+        }
+    }
+
+    private func selectRequestedDisplay(_ id: String?) {
+        guard let id, let match = displays.first(where: { "uuid:" + $0.displayUUID.lowercased() == id.lowercased() }) else { return }
+        selectedDisplay = match.displayUUID
+    }
+
     private func modeLabel(_ mode: DisplayModeInfo) -> String {
         "\(mode.width) × \(mode.height) · \(mode.refreshRate == 0 ? "刷新率未知" : String(format: "%.2f Hz", mode.refreshRate))\(mode.hiDPI ? " · HiDPI" : "")"
     }
@@ -442,7 +497,7 @@ struct DisplayToolsView: View {
         let modes = try await DisplayToolsClient.request(ToolsModesPayload.self, ["modes", "list"])
         displays = modes.displays
         if !displays.contains(where: { $0.displayUUID == selectedDisplay }) {
-            let selected = controller.selectedStableID?.replacingOccurrences(of: "uuid:", with: "")
+            let selected = (controller.requestedToolsDisplayID ?? controller.selectedStableID)?.replacingOccurrences(of: "uuid:", with: "")
             selectedDisplay = displays.first(where: { $0.displayUUID.lowercased() == selected?.lowercased() })?.displayUUID
                 ?? displays.first?.displayUUID ?? ""
         }
@@ -515,7 +570,7 @@ struct DisplayToolsView: View {
         let targetUUID = selectedDisplay
         let target = Int(level.rounded())
         guard target != confirmedSoftwareDimmingLevels.value(for: targetUUID).map({ Int($0.rounded()) }) else { return }
-        perform {
+        perform(scope: .gamma) {
             do {
                 let response = try await DisplayToolsClient.request(ToolsApplyPayload.self,
                     ["dimming", "set", "\(target)%", "--display", "uuid:\(targetUUID)"])
@@ -537,7 +592,7 @@ struct DisplayToolsView: View {
     }
 
     private func adjust(_ control: MonitorControl, _ value: String) {
-        perform {
+        perform(scope: .controls) {
             let response = try await DisplayToolsClient.request(ToolsControlsPayload.self,
                 [control.rawValue, "set", value, "--display", selector])
             if let error = response.results.first(where: { !$0.ok })?.error { throw VibeError(.backendFailure, error) }
@@ -547,7 +602,7 @@ struct DisplayToolsView: View {
     }
 
     private func applyProfile(_ name: String, dryRun: Bool) {
-        perform {
+        perform(scope: .profile(name)) {
             let result = try await DisplayToolsClient.request(ProfileApplyReport.self,
                 ["profile", "apply", name] + (dryRun ? ["--dry-run"] : []))
             guard result.ok else {
@@ -558,12 +613,16 @@ struct DisplayToolsView: View {
         }
     }
 
-    private func perform(_ operation: @escaping @MainActor () async throws -> Void) {
+    private func perform(scope: ToolsFeedbackScope = .display, _ operation: @escaping @MainActor () async throws -> Void) {
         guard !busy else { return }
-        busy = true; failed = false; notice = ""
+        feedbackScope = scope
+        busy = true; failed = false; notice = "正在处理…"
         Task { @MainActor in
             defer { busy = false }
-            do { try await operation() }
+            do {
+                try await operation()
+                if notice == "正在处理…" { notice = "" }
+            }
             catch { failed = true; notice = String(describing: error) }
         }
     }
@@ -601,14 +660,16 @@ private struct ToolsDaemonStatusPayload: Decodable, Sendable {
 }
 
 extension DisplayBarController {
-    func showDisplayTools() {
+    func showDisplayTools(section: DisplayToolsSection = .display, display: DisplayDescriptor? = nil) {
+        toolsSection = section
+        requestedToolsDisplayID = display?.stableID ?? selectedStableID
         popover?.performClose(nil)
         if toolsWindow == nil {
             let hostingController = NSHostingController(rootView: DisplayToolsView(controller: self))
             // A changing slider readout must not update the window's own content size.
             hostingController.sizingOptions = []
             let window = NSWindow(contentViewController: hostingController)
-            window.title = "DisplayDJ — 显示设置与预设"
+            window.title = "DisplayDJ — 设置"
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
             window.setContentSize(NSSize(width: 700, height: 560))
             window.contentMinSize = NSSize(width: 660, height: 520)

@@ -17,7 +17,27 @@ final class DisplayBarController: NSObject, ObservableObject {
   /// Internal rather than `private` because building it, and showing and hiding
   /// it, live in DisplayBarController+Popover.swift. Never part of the view
   /// surface.
+  var isInteractionPreview = false
+  var previewRefreshDelayMilliseconds = 0
+  var panelWindow: NSWindow?
   var toolsWindow: NSWindowController?
+  @Published var toolsSection: DisplayToolsSection = .display
+  @Published var requestedToolsDisplayID: String?
+  @Published var brightnessFeedback: [String: BrightnessOperationFeedback] = [:]
+  @Published var brightnessSyncResults: [String: Bool] = [:]
+  var brightnessSyncTargets: [String: Int] = [:]
+  var brightnessFeedbackTasks: [String: Task<Void, Never>] = [:]
+  @Published var connectionTargetKey: String?
+  @Published var connectionRecordError: String?
+  @Published var isRestoringConnections = false
+  @Published var quitRecoveryFailed = false
+  @Published var isCheckingQuit = false
+  var connectionTopology: [DisplayDescriptor] = []
+  var isConfirmingDisconnect = false
+  var panelAvailableHeight: CGFloat {
+    (statusItem?.button?.window?.screen ?? NSScreen.main)?.visibleFrame.height ?? 700
+  }
+
   var popover: NSPopover?
   /// Internal for the same reason as `popover`: the global monitor is installed
   /// and removed from the same file.
@@ -94,6 +114,8 @@ final class DisplayBarController: NSObject, ObservableObject {
   /// top-bar spinner stay hidden on the two-second poll that merely keeps the cards in
   /// step with hardware, while still appearing for reads the user actually asked for.
   @Published var isPollingRead = false
+  /// Only the user's refresh action animates the refresh button, never a write or poll.
+  @Published var isRefreshingFromToolbar = false
 
   // MARK: - Display connection
 
@@ -133,7 +155,7 @@ final class DisplayBarController: NSObject, ObservableObject {
   /// How a connection controller is built. Replaced by tests; the production
   /// path resolves the private entry point and throws when it is absent.
   var connectionControllerFactory: () throws -> DisplayConnectionController = {
-    try DisplayConnectionController.live()
+    try DisplayConnectionController.live(verificationAttempts: 75)
   }
 
   /// Where disconnect records live. Shared with the CLI, so a display
@@ -198,14 +220,8 @@ final class DisplayBarController: NSObject, ObservableObject {
     isReading || isWriting || isChangingConnection || isPreparingBrightnessSync
   }
 
-  /// Whether the top-bar activity spinner should be visible.
-  ///
-  /// Background polling re-reads every display every two seconds so a card stays in step
-  /// with hardware another app or the monitor's own OSD may have changed. That is a silent
-  /// refresh: the numbers just move, and a spinner on every tick makes the UI look busy when
-  /// nothing the user asked for is pending — so the poll is excluded here. The spinner is
-  /// reserved for operations that actually block the user: a write, a connection change, or
-  /// a read they triggered themselves (manual refresh, a single-display read, a hotkey).
+  /// Busy state for recovery and connection controls; silent polling is excluded.
+  /// The refresh button has its own action state in `isRefreshingFromToolbar`.
   var showsActivitySpinner: Bool {
     (isReading && !isPollingRead) || isWriting || isChangingConnection || isPreparingBrightnessSync
   }
@@ -290,6 +306,7 @@ final class DisplayBarController: NSObject, ObservableObject {
       // controls are enabled or disabled from this, so it has to be the truth
       // about the whole topology rather than about the panels this app drives.
       onlineDisplayCount = allDisplays.count
+      connectionTopology = allDisplays
       refreshDisconnectedDisplays()
 
       // Re-resolve the selection against the new topology: keep the same physical
@@ -370,6 +387,14 @@ final class DisplayBarController: NSObject, ObservableObject {
   /// Drops the manual order so cards follow the physical layout again.
   ///
   /// Lives in the primary file because it assigns `displays`, whose setter is `private(set)`.
+  func moveDisplay(_ display: DisplayDescriptor, offset: Int) {
+    guard displays.allSatisfy({ $0.stableID != nil }),
+          let index = displays.firstIndex(where: { $0.selectionKey == display.selectionKey }),
+          displays.indices.contains(index + offset), let source = display.stableID,
+          let destination = displays[index + offset].stableID else { return }
+    reorderDisplays(sourceStableID: source, destinationStableID: destination)
+  }
+
   func resetOrderToPhysical() {
     var next = preferences
     next.manualOrder = nil
@@ -419,11 +444,12 @@ final class DisplayBarController: NSObject, ObservableObject {
 
   /// The polling timer exists iff the popover is visible and polling is active.
   var popoverIsVisible: Bool {
-    refreshTimer != nil
+    refreshTimer != nil || panelWindow?.isVisible == true
   }
   // MARK: - Cleanup
 
   deinit {
+    for task in brightnessFeedbackTasks.values { task.cancel() }
     wakeRefreshTask?.cancel()
     topologyRefreshTask?.cancel()
     if let screenParametersObserver {

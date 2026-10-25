@@ -23,14 +23,14 @@ struct BrightnessReadout: View {
   private var hasReading: Bool { BrightnessFormatting.showsUnit(for: value) }
 
   /// Fixed width so the header never reflows as the digit count swings between `9`, `99` and
-  /// `100` mid-slide. The readout sits after a spacer next to the power button; a
+  /// `100` mid-slide. The readout sits next to the display's action menu; a
   /// variable-width number would slide left and right under the finger and nudge the name off
   /// the leading edge. Sized to the widest value (`"100"` plus the `%` glyph, the semibold
-  /// face it is drawn in) and right-aligned so the digits always hug the power button rather
+  /// face it is drawn in) and right-aligned so the digits always hug the action menu rather
   /// than the name.
   private static let maxWidth: CGFloat = {
-    let digitsFont = roundedFont(size: 13, weight: .semibold)
-    let unitFont = roundedFont(size: 9, weight: .medium)
+    let digitsFont = NSFont.monospacedSystemFont(ofSize: 18, weight: .semibold)
+    let unitFont = roundedFont(size: 11, weight: .medium)
     let digits = (BrightnessFormatting.readoutDigits(for: 100) as NSString)
       .size(withAttributes: [.font: digitsFont]).width
     let unit = (BrightnessFormatting.unitSuffix as NSString)
@@ -38,8 +38,7 @@ struct BrightnessReadout: View {
     return ceil(digits + 1 + unit)
   }()
 
-  /// Matches the SwiftUI `.system(size:weight:design: .rounded)` the readout draws with, so the
-  /// reserved width is measured in the same face the digits are actually rendered in.
+  /// Matches the rounded unit suffix; the digits use a separate monospaced face.
   private static func roundedFont(size: CGFloat, weight: NSFont.Weight) -> NSFont {
     let base = NSFont.systemFont(ofSize: size, weight: weight)
     let descriptor = base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor
@@ -49,12 +48,12 @@ struct BrightnessReadout: View {
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: 1) {
       Text(BrightnessFormatting.readoutDigits(for: value))
-        .font(.system(size: 13, weight: hasReading ? .semibold : .medium, design: .rounded))
+        .font(.system(size: 18, weight: hasReading ? .semibold : .medium, design: .monospaced))
         .foregroundColor(hasReading ? .primary : .secondary)
 
       if hasReading {
         Text(BrightnessFormatting.unitSuffix)
-          .font(.system(size: 9, weight: .medium, design: .rounded))
+          .font(.system(size: 11, weight: .medium, design: .rounded))
           .foregroundColor(.secondary)
       }
     }

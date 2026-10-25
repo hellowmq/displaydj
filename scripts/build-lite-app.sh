@@ -9,7 +9,7 @@ case "${1:-}" in
 esac
 swift build -c "$configuration" --product DisplayDJLite
 bin_dir="$(swift build -c "$configuration" --show-bin-path)"
-app="$PWD/.build/DisplayDJLite.app"
+app="${DISPLAYDJ_LITE_APP_PATH:-$PWD/.build/DisplayDJLite.app}"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin_dir/DisplayDJLite" "$app/Contents/MacOS/DisplayDJLite"
 cp LICENSE "$app/Contents/Resources/LICENSE"

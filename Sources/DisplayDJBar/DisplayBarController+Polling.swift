@@ -5,6 +5,20 @@ import Foundation
 
 extension DisplayBarController {
 
+  /// Keep manual-refresh presentation separate from brightness activity. The flag
+  /// also covers discovery, before any hardware read owns `reads`.
+  @discardableResult func refreshFromToolbar() async -> Bool {
+    guard !isRefreshingFromToolbar, !isLoading, !isRestoringConnections else { return false }
+    isRefreshingFromToolbar = true
+    defer { isRefreshingFromToolbar = false }
+    // Explicit simulation only; real refreshes never wait for a demonstration.
+    if isInteractionPreview, previewRefreshDelayMilliseconds > 0 {
+      try? await Task.sleep(for: .milliseconds(previewRefreshDelayMilliseconds))
+    }
+    await scanAndRefresh()
+    return true
+  }
+
   /// Reads one display, named explicitly.
   ///
   /// Every card shows its own reading, so a read is addressed to a display rather than to
@@ -21,7 +35,8 @@ extension DisplayBarController {
   /// mid-drag left it on a placeholder, and a failed card's retry button did nothing at all,
   /// because the recovery path clears the banner before re-reading and the read never ran.
   func refreshDisplay(stableID: String, trigger: ReadTrigger = .popoverContent) async {
-    guard trigger.allowsRead(popoverIsVisible: popoverIsVisible) else { return }
+    guard !isChangingConnection, !isRestoringConnections,
+      trigger.allowsRead(popoverIsVisible: popoverIsVisible) else { return }
     switch TargetedRead.decision(
       stableID: stableID,
       writeInFlight: intents.isDraining,
@@ -122,6 +137,7 @@ extension DisplayBarController {
   /// the lifecycle rules exist to stop — while also colliding with a user-initiated read on
   /// the same hardware lane, since only one of the two was ever cancellable.
   func refreshAllDisplays() async {
+    guard !isChangingConnection, !isRestoringConnections else { return }
     guard popoverIsVisible else { return }
     guard !intents.isDraining, !intents.hasPending else { return }
 

@@ -10,3 +10,7 @@ Lite 首发新增：
 另只读核对 `hellowmq/hellowmq.github.io`：`studio/displaydj-settings-1.0.2.webp` 仍展示 Full 设置页，Full 界面本轮未改，不需换成 Lite。网站若增加 Lite，应另加产品对应素材与入口；本次没有修改或部署网站仓库。
 
 维护标准：截图使用明确版本的安装实例；保留产品/版本/状态说明，不把模拟屏幕、概念稿或 UI 渲染当真实设备成功证据。Full 交互改版实现后重新截图，再更新其对应页面。真实屏幕 UUID、序列号和其他 App/桌面内容不进入公开图。
+
+## 2026-10-25 更新
+
+README 和当前发布说明使用 `Assets/Previews/DisplayDJLite-0.1.0-2026-10-25.jpg` 与 `DisplayDJ-1.0.2-2026-10-25.jpg`，均来自 Applications 中本轮真实应用，只包含对应窗口。当前只有内建屏，Lite 的 HP 行明确为未接入历史记录；截图不证明外屏 DDC 支持。旧 PNG 保留作初次发行历史素材，网站仓库没有随本次发布修改。

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-25 — Full 1.0.2 / Lite 0.1.0 refreshed in place
+
+- Retain both version numbers and existing release URLs at the maintainer’s explicit request; replace both tags, ZIP/DMG files and SHA-256 sidecars with this source revision. Lite remains a prerelease and Full remains latest stable.
+- Add Lite native built-in and supported external-display DDC brightness with monospaced values, per-screen feedback, keyboard adjustment and guarded asynchronous intent handling; never silently fall back to Gamma.
+- Deliver the selected Full panel layout, clearer scroll/keyboard targets, per-display write feedback, organized settings, explicit disconnect confirmation and verified restore-before-quit.
+- Share a short, monochrome native refresh-symbol animation with immediate press feedback; suppress fleeting pending text for quick reads and stabilize Lite quit text. Respect Reduce Motion.
+- Validation: 756 automated tests; native Full/Lite refresh and lifecycle checks; Lite built-in brightness adjustment/readback/exact restoration on Apple M1. External DDC, clean first install and minimum-system support retain their existing validation limits.
+- [Update and validation notes](docs/RELEASE-REFRESH-2026-10-25.md).
+
 ## Lite 0.1.0 — 2026-10-16 (Prerelease)
 
 - Add a separate Lite app for external-display disconnect/reconnect, recovery records, safe refusal, inline failures and restore-before-quit choices.
@@ -7,7 +16,7 @@
 - Integrate the approved Lite icon and a compact native panel with explicit disconnect confirmation, stable target rows and keyboard refresh/quit.
 - Consolidate ZIP/DMG packaging into one implementation with product-specific identity/content verification; retain existing Full commands and optional DMG output.
 - Add shared maintenance/release standards, contribution and issue/PR templates, and an interaction contract based on the selected Full design.
-- Full remains 1.0.2. Its selected interaction redesign is still pending implementation. Lite is published separately as the `lite-v0.1.0` prerelease; Full remains the latest stable release.
+- Full remains 1.0.2. Its interaction redesign was pending at this initial prerelease; the 2026-10-25 update above supersedes that state. Lite is published separately as the `lite-v0.1.0` prerelease; Full remains the latest stable release.
 
 ## 1.0.2 — 2026-10-12
 

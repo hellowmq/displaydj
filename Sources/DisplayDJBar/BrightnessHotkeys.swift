@@ -180,6 +180,7 @@ final class BrightnessHotkeyCoordinator {
   private var routing = BrightnessHotkeyRouting()
   private var preference: BrightnessHotkeyPreference
   private let onTrigger: (BrightnessHotkey) -> Void
+  var isObservingGlobally: Bool { port.map { CGEvent.tapIsEnabled(tap: $0) } ?? false }
   private(set) var isEnabled: Bool
 
   init(preference: BrightnessHotkeyPreference = BrightnessHotkeyPreference(),

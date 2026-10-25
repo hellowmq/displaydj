@@ -32,9 +32,10 @@ enum DisplayCardsViewport {
   /// Non-positive and non-finite inputs mean "not measured yet", not "no cards": an unmeasured
   /// geometry reader reports zero, and treating that as a real answer is how the list would
   /// collapse to nothing and stay there.
-  static func height(contentHeight: CGFloat) -> CGFloat {
+  static func height(contentHeight: CGFloat, availableHeight: CGFloat = .greatestFiniteMagnitude,
+                     chromeHeight: CGFloat = 0) -> CGFloat {
     guard contentHeight.isFinite, contentHeight > 0 else { return unmeasuredHeight }
-    return min(contentHeight, maximumHeight)
+    return min(contentHeight, maximumHeight, max(44, availableHeight - chromeHeight))
   }
 }
 

@@ -18,7 +18,7 @@ extension DisplayBarController {
 
   func setBrightness(_ value: Int, for stableID: String, synchronize: Bool = true,
                      showKeyboardFeedback: Bool = false, relativeSteps: [Int]? = nil) async {
-    guard !displays.isEmpty else { return }
+    guard !displays.isEmpty, !isChangingConnection, !isRestoringConnections, !isCheckingQuit, !isConfirmingDisconnect else { return }
     guard !isPreparingBrightnessSync else {
       failures.topology = BrightnessFailure(
         summary: "正在准备多屏同步",
@@ -54,10 +54,13 @@ extension DisplayBarController {
         stopBrightnessSyncForMissingBaseline()
       }
     }
+    brightnessSyncTargets = planned.count > 1 ? Dictionary(uniqueKeysWithValues: planned.map { ($0.displayStableID, $0.value) }) : [:]
+    brightnessSyncResults = [:]
     if !showKeyboardFeedback {
       discardKeyboardSteps(for: Set(planned.map(\.displayStableID)))
     }
     for intent in planned {
+      beginBrightnessFeedback(for: intent.displayStableID)
       intents.submit(intent)
       setIntendedForDisplay(intent.value, id: intent.displayStableID)
       clearFailure(for: intent.displayStableID)
@@ -130,9 +133,15 @@ extension DisplayBarController {
       brightnessWriteLogger.info("brightness write verified displayIndex=\(index) requested=\(intent.value) observed=\(verified)")
       // Succeeding on one display resolves only that display's banner; every other card's
       // failure is still unresolved and keeps its retry button.
-      clearFailure(for: intent.displayStableID)
+      if !intents.hasPending(for: intent.displayStableID) {
+        clearFailure(for: intent.displayStableID)
+        confirmBrightnessFeedback(for: intent.displayStableID)
+        if brightnessSyncTargets[intent.displayStableID] == intent.value {
+          brightnessSyncResults[intent.displayStableID] = true
+        }
+      }
       if keyboardFeedbackIDs.contains(intent.displayStableID),
-         intents.latestValue(for: intent.displayStableID) == intent.value {
+         !intents.hasPending(for: intent.displayStableID) {
         showKeyboardFeedback(for: intent.displayStableID, state: .confirmed(verified))
       }
     } catch {
@@ -149,6 +158,11 @@ extension DisplayBarController {
       let index = displays.firstIndex(where: { $0.stableID == intent.displayStableID }) ?? -1
       let code = (error as? DisplayDJError)?.code.rawValue ?? String(describing: type(of: error))
       brightnessWriteLogger.error("brightness write failed displayIndex=\(index) code=\(code, privacy: .public)")
+      guard !intents.hasPending(for: intent.displayStableID) else { return }
+      brightnessFeedback[intent.displayStableID] = .failed
+      if brightnessSyncTargets[intent.displayStableID] == intent.value {
+        brightnessSyncResults[intent.displayStableID] = false
+      }
       setFailure(
         BrightnessFailurePresenter.failure(
           for: error,

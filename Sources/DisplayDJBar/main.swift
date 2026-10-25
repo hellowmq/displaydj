@@ -82,7 +82,18 @@ NSApplication.shared.mainMenu = mainMenu
 // MARK: - Controller
 
 let controller = DisplayBarController()
+if CommandLine.arguments.contains("--interaction-preview") {
+  let count = CommandLine.arguments.contains("--two-displays") ? 2 : 6
+  let args = CommandLine.arguments
+  let delay = args.firstIndex(of: "--refresh-delay-ms").flatMap { index in
+    args.indices.contains(index + 1) ? Int(args[index + 1]) : nil
+  } ?? 0
+  FullInteractionPreview(count: count).configure(controller, refreshDelayMilliseconds: delay)
+}
+let applicationDelegate = FullApplicationDelegate(controller: controller)
+app.delegate = applicationDelegate
 controller.setup()
 if CommandLine.arguments.contains("--display-tools") { controller.showDisplayTools() }
+if CommandLine.arguments.contains("--show") { controller.showPanelWindow() }
 
 app.run()

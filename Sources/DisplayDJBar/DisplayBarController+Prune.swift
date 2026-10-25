@@ -39,6 +39,13 @@ extension DisplayBarController {
     readFailureCounts = readFailureCounts.filter { liveIDs.contains($0.key) }
     // A detached display's banner has no card left to live on, but every attached
     // display's banner is still true and must survive the rescan.
+    for id in Array(brightnessFeedback.keys) where !liveIDs.contains(id) {
+      brightnessFeedbackTasks[id]?.cancel()
+      brightnessFeedbackTasks[id] = nil
+      brightnessFeedback[id] = nil
+    }
+    brightnessSyncTargets = brightnessSyncTargets.filter { liveIDs.contains($0.key) }
+    brightnessSyncResults = brightnessSyncResults.filter { liveIDs.contains($0.key) }
     failures.prune(keeping: liveBannerKeys)
     // Queued intents for departed displays are dropped outright; an already-running one is
     // left to Core's write/restore semantics and merely flagged, so its result is discarded

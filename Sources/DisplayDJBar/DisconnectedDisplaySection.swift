@@ -13,15 +13,15 @@ struct ConnectionNoticeRow: View {
   var body: some View {
     HStack(alignment: .top, spacing: 5) {
       Image(systemName: "exclamationmark.triangle.fill")
-        .font(.system(size: 9))
+        .font(.system(size: 11))
         .padding(.top, 1)
         .accessibilityHidden(true)
 
       VStack(alignment: .leading, spacing: 2) {
         Text(notice.summary)
-          .font(.system(size: 10, weight: .semibold))
+          .font(.system(size: 12, weight: .semibold))
         Text(notice.suggestion)
-          .font(.system(size: 10))
+          .font(.system(size: 12))
           .foregroundColor(.orange.opacity(0.85))
       }
       .fixedSize(horizontal: false, vertical: true)
@@ -53,37 +53,40 @@ struct DisconnectedDisplaySection: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 4) {
-      Text("已断开的显示器")
-        .font(.system(size: 10, weight: .semibold))
+      Text("恢复记录")
+        .font(.system(size: 12, weight: .semibold))
         .foregroundColor(.secondary)
         .accessibilityAddTraits(.isHeader)
 
-      ForEach(records, id: \.runtimeID) { record in
-        let key = DisplayConnectionList.key(for: record.runtimeID)
+      ForEach(records, id: \.self) { record in
+        let key = DisplayConnectionList.key(for: record)
 
         VStack(alignment: .leading, spacing: 4) {
           HStack(spacing: 4) {
             Image(systemName: "display.slash")
-              .font(.system(size: 9))
+              .font(.system(size: 11))
               .foregroundColor(.secondary)
               .accessibilityHidden(true)
 
             Text(record.name)
-              .font(.system(size: 10))
+              .font(.system(size: 12))
               .lineLimit(1)
-              .truncationMode(.tail)
+              .truncationMode(.tail).help(record.name)
 
             Spacer(minLength: 4)
 
-            Button("重新连接") {
+            Button(controller.connectionTargetKey == key && controller.isChangingConnection ? "正在连接…" : "重新连接") {
               Task { await controller.reconnect(record) }
             }
             .buttonStyle(.link)
-            .font(.system(size: 10, weight: .medium))
-            .disabled(controller.showsActivitySpinner)
+            .font(.system(size: 12, weight: .medium))
+            .disabled(controller.showsActivitySpinner || controller.recoveryGuidance(for: record) != nil)
             .accessibilityLabel("重新连接 \(record.name)")
           }
 
+          if let reason = controller.recoveryGuidance(for: record) {
+            Text(reason).font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+          }
           if let notice, notice.id == key {
             ConnectionNoticeRow(notice: notice)
           }

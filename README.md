@@ -21,19 +21,21 @@ A macOS menu bar app and standalone CLI for hands-on display control and automat
 | Product | Scope | Status |
 | --- | --- | --- |
 | **DisplayDJ Full** | Brightness, display settings, connections, CLI and optional local service | [1.0.2 download](https://github.com/hellowmq/displaydj/releases/tag/v1.0.2) |
-| **DisplayDJ Lite** | One external-display disconnect/reconnect workflow with saved recovery | [0.1.0 prerelease download](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.1.0) · [Validation notes](docs/DISPLAYDJ-LITE.md) |
+| **DisplayDJ Lite** | Built-in brightness, supported external-display DDC brightness, and disconnect/reconnect with saved recovery | [0.1.0 prerelease download](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.1.0) · [Validation notes](docs/DISPLAYDJ-LITE.md) |
 
-Lite is the current focused user-validation entry; Full continues maintenance. Both share the connection core but keep separate App identities, recovery data and versions. See [maintenance/release standards](docs/MAINTENANCE.md), [contributing](CONTRIBUTING.md) and the [interaction contract](docs/INTERACTION-CONTRACT.md).
+Choose Lite for basic brightness and display connections, or Full for display settings, automation and the CLI. Both keep separate App identities, recovery data and versions. See [maintenance/release standards](docs/MAINTENANCE.md), [contributing](CONTRIBUTING.md) and the [interaction contract](docs/INTERACTION-CONTRACT.md).
 
 <p align="center"><img src="Assets/DisplayDJLiteIcon.png" alt="DisplayDJ Lite icon" width="96"></p>
 
-![Lite 0.1.0 real application preview; a saved record is not proof a display is online](Assets/Previews/DisplayDJLite-0.1.0.png)
+![Lite 0.1.0 refreshed build: real built-in brightness control and an offline historical record](Assets/Previews/DisplayDJLite-0.1.0-2026-10-25.jpg)
+
+Both downloads were updated in place on **2026-10-25**, keeping the existing tags and filenames. Lite now includes hardware brightness controls. Full adds clearer per-screen feedback and settings; both use monospaced brightness values and a brief native refresh animation. If you downloaded an earlier build with the same version number, download it again and use its new SHA-256 file. See the [update and validation notes](docs/RELEASE-REFRESH-2026-10-25.md).
 
 Lite verifies restoration of current targets before normal quit. A recovery child process must be ready before a disconnect and restores applicable Lite targets after GUI termination. Ordinary reconnect, restore-and-quit and SIGKILL recovery passed on one Dell connection; the absent HP record is retained. Restore and quit before replacement or uninstall; see the [recovery instructions](docs/LITE-RECOVERY.md).
 
 DisplayDJ treats display connection as a control, not a cable chore. Disconnect one display and it disappears from the macOS desktop layout, so windows move to the displays that remain online. Reconnect it later from the menu bar or `display-cli`. This is different from dimming the panel or sending a DDC sleep command.
 
-The same app also controls brightness, contrast, monitor volume, display modes, and named brightness profiles. Its standalone CLI works without opening the app or running a daemon; an optional local HTTP service is available when an automation needs persistent state.
+Full also controls contrast, monitor volume, display modes, and named brightness profiles. Its standalone CLI works without opening the app or running a daemon; an optional local HTTP service is available when an automation needs persistent state.
 
 <p align="center">
   <img src="Assets/DisplayDJIcon.svg" alt="DisplayDJ icon" width="160">
@@ -52,6 +54,7 @@ Connection switching uses private macOS APIs and is hardware/system dependent. D
 
 | Entry point | Best for | Implemented capabilities |
 | --- | --- | --- |
+| **DisplayDJLite.app** | Basic brightness and display connections | Native built-in brightness, DDC brightness on supported external displays, per-screen feedback, disconnect/reconnect and restore-before-quit; no CLI or local service |
 | **DisplayDJ.app** | Everyday desktop use | Brightness cards, scroll-wheel control, optional shortcuts and brightness media keys with per-screen feedback, aliases and sorting, disconnect/reconnect; a display settings window with per-display Gamma, display modes, external-display volume and contrast, brightness profiles, and optional hardware-brightness synchronization |
 | **display-cli** | Terminal users, scripts, and coding agents | Display discovery, brightness, restore, disconnect/reconnect, keep-awake, task lifecycle, diagnostics, and service management; no app or background service required |
 | **Optional local service** | Automations that need HTTP access or state that persists across commands | Bearer-token authentication, Gamma, keep-awake leases, sessions, and heartbeats; started and stopped through the CLI |
@@ -61,6 +64,8 @@ The `displaydj` compatibility command is also retained, so existing `get brightn
 ## Quick start
 
 ### Download the app
+
+For basic brightness and display connections, download [Lite 0.1.0](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.1.0) and place `DisplayDJLite.app` in `/Applications`. Lite remains a prerelease. Restore current external displays and quit before replacing either app; keep the two app bundles separate.
 
 Download the arm64 ZIP or DMG from the [Full 1.0.2 release](https://github.com/hellowmq/displaydj/releases/tag/v1.0.2). The bundle includes `DisplayDJ.app`, the standalone `display-cli`, and the legacy-compatible `displaydj` command.
 
@@ -176,7 +181,7 @@ Restoration is not an absolute guarantee. `SIGKILL` prevents cleanup, although s
 | Capability | Current boundary |
 | --- | --- |
 | Apple Silicon external-display DDC | Uses DisplayDJ's shared read/write implementation; on one current HP D27k connection, v1.0.0 verified brightness and contrast writes, readback, and restoration. That display does not support DDC volume control |
-| Built-in display brightness | Uses the DisplayServices backend in the main CLI and HTTP API; v1.0.0 completed a small write, independent readback, and restoration |
+| Built-in display brightness | Native DisplayServices control in Full and Lite; Lite GUI adjustment, independent readback and exact baseline restoration passed on this Apple M1. This does not establish external-display DDC compatibility |
 | Intel external-display DDC | No production read/write path; software Gamma may be available |
 | macOS 13/14 | Deployment target starts at macOS 13; v1.0.0 was physically tested only on this machine running macOS 27, without minimum-version installation or hardware acceptance testing |
 | Display disconnect/reconnect | Depends on private APIs; v1.0.0 previously completed disconnect, reconnect, and topology readback on one current Dell connection. Other devices do not yet have equivalent evidence |

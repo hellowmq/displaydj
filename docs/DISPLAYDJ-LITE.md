@@ -1,6 +1,12 @@
 # DisplayDJ Lite 0.1.0
 
-Lite 只做单台外屏退出 Mac 桌面与重新连接。它与 Full 共用连接内核，有独立 App、版本和恢复文件；没有亮度、Gamma、模式、CLI、HTTP、登录项或 daemon。0.1.0 已作为独立预发布版交付：[下载与发布说明](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.1.0)。Full 1.0.2 仍为最新稳定版。
+2026-10-25 更新：Lite 提供内建屏原生亮度、支持的外屏 DDC 亮度，以及单台外屏退出 Mac 桌面与重新连接。与 Full 共享底层能力，但有独立 App、版本和恢复文件；不包含 Gamma、模式、CLI、HTTP、登录项或 daemon。
+
+本次按明确授权覆盖原 `lite-v0.1.0` 标签与附件，仍为预发布版：[下载与发布说明](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.1.0)。Full 1.0.2 保持最新稳定版。[本次验证与限制](RELEASE-REFRESH-2026-10-25.md)。
+
+## 基础亮度
+
+内建屏走原生背光，外屏走支持的 DDC 硬件亮度；失败明确说明，不静默改用软件调暗。亮度数字等宽，滑块支持左右方向键每次 5 个百分点、Tab 切换目标。拖动值、待确认值和硬件回读分开，逐屏处理失败与重试。刷新与调节各有自己的状态。
 
 ## 使用与恢复
 
@@ -18,7 +24,7 @@ python3 -B scripts/smoke-lite.py
 bash scripts/run-lite-app.sh
 ```
 
-默认运行真实模式，启动只读取；只有明确确认的连接操作才写入。产物 `.build/DisplayDJLite.app`，标识 `io.github.hellowmq.displaydj.lite`，版本 0.1.0，部署目标 macOS 13。`--release` 构建 Release。已批准图标随包生成 icns；菜单栏使用同家族模板图标，面板跟随系统浅深色。
+默认运行真实模式，启动只读取；亮度调节写入对应硬件，连接写入须明确确认。产物 `.build/DisplayDJLite.app`，标识 `io.github.hellowmq.displaydj.lite`，版本 0.1.0，部署目标 macOS 13。`--release` 构建 Release。已批准图标随包生成 icns；菜单栏使用同家族模板图标，面板跟随系统浅深色。
 
 ```bash
 bash scripts/run-lite-app.sh --preview

@@ -21,6 +21,10 @@ private struct BrightnessDiscovery: DisplayDiscovering {
   func discoverDisplays() async throws -> [DisplayDescriptor] { displays }
 }
 
+private struct FailedRefreshDiscovery: DisplayDiscovering {
+  func discoverDisplays() async throws -> [DisplayDescriptor] { throw CocoaError(.fileReadUnknown) }
+}
+
 private actor ChangingBrightnessDiscovery: DisplayDiscovering {
   private var displays: [DisplayDescriptor] = []
   private var scans = 0
@@ -81,6 +85,43 @@ private final class NativeBackendStub: BrightnessBackend {
 @Suite("Menu bar native and external brightness routing")
 @MainActor
 struct DisplayBrightnessAccessTests {
+  @Test(arguments: [false, true])
+  func busyRefreshIsNotAcceptedOrDiscovered(restoring: Bool) async {
+    let discovery = ChangingBrightnessDiscovery()
+    let controller = DisplayBarController()
+    controller.displayDiscovery = discovery
+    controller.isRestoringConnections = restoring
+    controller.isChangingConnection = !restoring
+    #expect(!(await controller.refreshFromToolbar()))
+    #expect(!controller.isRefreshingFromToolbar)
+    #expect(await discovery.scanCount() == 0)
+  }
+
+  @Test func acceptedRefreshFailureEndsActivityAndKeepsItsError() async {
+    let controller = DisplayBarController()
+    controller.displayDiscovery = FailedRefreshDiscovery()
+    #expect(await controller.refreshFromToolbar())
+    #expect(!controller.isRefreshingFromToolbar)
+    #expect(controller.failures.topology != nil)
+  }
+
+  @Test func manualRefreshOwnsOnlyItsActionAndCoversDiscovery() async {
+    let discovery = OutOfOrderBrightnessDiscovery()
+    let controller = DisplayBarController()
+    controller.displayDiscovery = discovery
+
+    let refresh = Task { await controller.refreshFromToolbar() }
+    await discovery.waitForFirstScan()
+    #expect(controller.isRefreshingFromToolbar)
+    // Discovery itself is asynchronous, before isReading can block duplicate clicks.
+    #expect(!(await controller.refreshFromToolbar()))
+    #expect(controller.isRefreshingFromToolbar)
+    await discovery.finishFirstScan()
+    #expect(await refresh.value)
+    #expect(!controller.isRefreshingFromToolbar)
+    #expect(controller.displays.isEmpty)
+  }
+
   @Test func delayedTopologyRefreshFindsDisplayMissingAtFirstScan() async throws {
     let discovery = ChangingBrightnessDiscovery()
     let controller = DisplayBarController()
