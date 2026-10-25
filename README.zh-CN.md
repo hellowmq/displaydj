@@ -28,6 +28,7 @@
 | DisplayDJ Full 1.0.2 | DisplayDJ Lite 0.1.0（预发布） |
 | :---: | :---: |
 | <img src="Assets/Previews/DisplayDJ-1.0.2-2026-10-25.jpg" alt="Full 1.0.2：真实内建屏亮度界面" width="320"> | <img src="Assets/Previews/DisplayDJLite-0.1.0-2026-10-25.jpg" alt="Lite 0.1.0：真实内建屏亮度与未接入历史记录" width="320"> |
+| [ZIP](https://github.com/hellowmq/displaydj/releases/download/v1.0.2/displaydj-1.0.2-macos-arm64.zip) · [DMG](https://github.com/hellowmq/displaydj/releases/download/v1.0.2/displaydj-1.0.2-macos-arm64.dmg) · [ZIP SHA-256](https://github.com/hellowmq/displaydj/releases/download/v1.0.2/displaydj-1.0.2-macos-arm64.zip.sha256) · [DMG SHA-256](https://github.com/hellowmq/displaydj/releases/download/v1.0.2/displaydj-1.0.2-macos-arm64.dmg.sha256) | [ZIP](https://github.com/hellowmq/displaydj/releases/download/lite-v0.1.0/displaydj-lite-0.1.0-macos-arm64.zip) · [DMG](https://github.com/hellowmq/displaydj/releases/download/lite-v0.1.0/displaydj-lite-0.1.0-macos-arm64.dmg) · [ZIP SHA-256](https://github.com/hellowmq/displaydj/releases/download/lite-v0.1.0/displaydj-lite-0.1.0-macos-arm64.zip.sha256) · [DMG SHA-256](https://github.com/hellowmq/displaydj/releases/download/lite-v0.1.0/displaydj-lite-0.1.0-macos-arm64.dmg.sha256) |
 
 2026-10-25 构建的真实应用界面。截图展示本机内建屏；保存的 HP 未接入记录不表示设备在线，也不证明外屏 DDC 支持。
 

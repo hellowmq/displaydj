@@ -28,6 +28,7 @@ Choose Lite for basic brightness and display connections, or Full for display se
 | DisplayDJ Full 1.0.2 | DisplayDJ Lite 0.1.0 (Prerelease) |
 | :---: | :---: |
 | <img src="Assets/Previews/DisplayDJ-1.0.2-2026-10-25.jpg" alt="Full 1.0.2: real built-in brightness control" width="320"> | <img src="Assets/Previews/DisplayDJLite-0.1.0-2026-10-25.jpg" alt="Lite 0.1.0: real built-in brightness and an offline historical record" width="320"> |
+| [ZIP](https://github.com/hellowmq/displaydj/releases/download/v1.0.2/displaydj-1.0.2-macos-arm64.zip) · [DMG](https://github.com/hellowmq/displaydj/releases/download/v1.0.2/displaydj-1.0.2-macos-arm64.dmg) · [ZIP SHA-256](https://github.com/hellowmq/displaydj/releases/download/v1.0.2/displaydj-1.0.2-macos-arm64.zip.sha256) · [DMG SHA-256](https://github.com/hellowmq/displaydj/releases/download/v1.0.2/displaydj-1.0.2-macos-arm64.dmg.sha256) | [ZIP](https://github.com/hellowmq/displaydj/releases/download/lite-v0.1.0/displaydj-lite-0.1.0-macos-arm64.zip) · [DMG](https://github.com/hellowmq/displaydj/releases/download/lite-v0.1.0/displaydj-lite-0.1.0-macos-arm64.dmg) · [ZIP SHA-256](https://github.com/hellowmq/displaydj/releases/download/lite-v0.1.0/displaydj-lite-0.1.0-macos-arm64.zip.sha256) · [DMG SHA-256](https://github.com/hellowmq/displaydj/releases/download/lite-v0.1.0/displaydj-lite-0.1.0-macos-arm64.dmg.sha256) |
 
 Real application windows from the 2026-10-25 build. These screenshots show the built-in display on this Mac; the saved offline HP record is not an online display or proof of external DDC support.
 
