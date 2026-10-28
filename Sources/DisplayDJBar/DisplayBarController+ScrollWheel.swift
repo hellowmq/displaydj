@@ -111,10 +111,13 @@ extension DisplayBarController {
   /// failure has a card to land on; the wheel is used with the popover shut, so unless the
   /// menu bar itself reacts, failure and success look exactly alike.
   func adjustBrightnessViaScroll(by delta: Int) async {
-    if displayedBrightness == nil {
-      await refreshSelectedDisplayOnDemand()
+    let capturedID = selectedStableID
+    if displays.isEmpty || isAwaitingTopology { await scanAndRefresh() }
+    guard let stableID = capturedID ?? selectedStableID, !stableID.isEmpty,
+      displays.contains(where: { $0.stableID == stableID }) else { return }
+    if displayedBrightness(for: stableID) == nil {
+      await refreshDisplay(stableID: stableID, trigger: .userRequest)
     }
-    guard let stableID = selectedStableID, !stableID.isEmpty else { return }
     guard let current = displayedBrightness(for: stableID) else { return }
     let target = BrightnessAccessibility.adjusted(current, by: delta)
     guard target != current else { return }

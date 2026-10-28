@@ -55,6 +55,14 @@ extension DisplayBarController {
         showKeyboardFeedback(for: id, state: .failed("正在准备多屏同步，请稍后再试"))
         continue
       }
+      if isAwaitingTopology {
+        await scanAndRefresh()
+        guard keyboardRevisions[id] == first.revision,
+          displays.filter({ $0.stableID == id }).count == 1 else {
+          discardKeyboardSteps(for: [id])
+          continue
+        }
+      }
       showKeyboardFeedback(for: id, state: .reading)
       do {
         // Polling stops with the popover closed, and other apps may have changed brightness.

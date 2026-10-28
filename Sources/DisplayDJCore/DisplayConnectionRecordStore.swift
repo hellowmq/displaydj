@@ -9,19 +9,26 @@ public struct DisplayConnectionRecord: Codable, Equatable, Hashable, Sendable {
   /// The saved runtime ID was observed on another display or predates a boot.
   /// Keep the record, but require online stable-identity discovery to use it.
   public let requiresRediscovery: Bool?
+  /// Optional for old records. A guardian may restore only its parent's intent.
+  public let operationID: UUID?
+  public let ownerID: UUID?
 
   public init(
     runtimeID: UInt32,
     stableID: String?,
     name: String,
     disconnectedAt: Date = Date(),
-    requiresRediscovery: Bool? = nil
+    requiresRediscovery: Bool? = nil,
+    operationID: UUID? = nil,
+    ownerID: UUID? = nil
   ) {
     self.runtimeID = runtimeID
     self.stableID = stableID
     self.name = name
     self.disconnectedAt = disconnectedAt
     self.requiresRediscovery = requiresRediscovery
+    self.operationID = operationID
+    self.ownerID = ownerID
   }
 }
 
@@ -91,15 +98,10 @@ public final class FileDisplayConnectionRecordStore: DisplayConnectionRecordStor
   }
 
   public func loadRecords() throws -> [DisplayConnectionRecord] {
-    guard let data = fileManager.contents(atPath: fileURL.path) else {
-      return []
-    }
-
-    guard !data.isEmpty else {
-      return []
-    }
-
+    guard fileManager.fileExists(atPath: fileURL.path) else { return [] }
     do {
+      let data = try Data(contentsOf: fileURL)
+      guard !data.isEmpty else { return [] }
       return try JSONDecoder().decode([DisplayConnectionRecord].self, from: data)
     } catch {
       throw DisplayDJError(

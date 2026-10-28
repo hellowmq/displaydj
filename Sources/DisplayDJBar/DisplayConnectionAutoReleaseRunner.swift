@@ -40,7 +40,8 @@ final class DisplayConnectionAutoReleaseRunner {
   func start() {
     source.start { [weak self] change in
       guard let self else { return }
-      Task { @MainActor in self.handle(change) }
+      let receivedAt = Date()
+      Task { @MainActor in await self.handle(change, receivedAt: receivedAt) }
     }
   }
 
@@ -50,9 +51,9 @@ final class DisplayConnectionAutoReleaseRunner {
     source.stop()
   }
 
-  private func handle(_ change: DisplayTopologyChange) {
+  private func handle(_ change: DisplayTopologyChange, receivedAt: Date) async {
     do {
-      guard let outcome = try release.handle(change) else { return }
+      guard let outcome = try await release.handleCoordinated(change, receivedAt: receivedAt) else { return }
       note(outcome)
       onChange()
     } catch {

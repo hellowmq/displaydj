@@ -104,7 +104,7 @@ struct BrightnessIntentBuffer {
     pendingValues = pendingValues.filter { liveIDs.contains($0.key) }
     pendingOrder = pendingOrder.filter { liveIDs.contains($0) }
     if let active {
-      isActiveOrphaned = !liveIDs.contains(active.displayStableID)
+      isActiveOrphaned = isActiveOrphaned || !liveIDs.contains(active.displayStableID)
     }
   }
 

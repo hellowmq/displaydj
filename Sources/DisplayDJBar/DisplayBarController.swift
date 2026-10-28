@@ -236,6 +236,8 @@ final class DisplayBarController: NSObject, ObservableObject {
   /// Re-checks a grant after the user returns from System Settings or the system prompt.
   nonisolated(unsafe) var applicationActivationObserver: NSObjectProtocol?
   private var scanGeneration: UInt64 = 0
+  var brightnessReadGeneration: UInt64 = 0
+  @Published var isAwaitingTopology = false
   var displayDiscovery: any DisplayDiscovering = CoreGraphicsDisplayDiscovery()
   var brightnessAccess = DisplayBrightnessAccess()
 
@@ -307,6 +309,7 @@ final class DisplayBarController: NSObject, ObservableObject {
       // about the whole topology rather than about the panels this app drives.
       onlineDisplayCount = allDisplays.count
       connectionTopology = allDisplays
+      isAwaitingTopology = false
       refreshDisconnectedDisplays()
 
       // Re-resolve the selection against the new topology: keep the same physical
@@ -338,6 +341,7 @@ final class DisplayBarController: NSObject, ObservableObject {
       }
     } catch {
       guard generation == scanGeneration else { return }
+      isAwaitingTopology = false
       failures.topology = BrightnessFailurePresenter.failure(for: error, operation: .scan)
     }
   }
@@ -416,6 +420,9 @@ final class DisplayBarController: NSObject, ObservableObject {
   /// A display waking up has not necessarily disconnected; its previous reading is simply
   /// unverified. Show an empty, inactive track until a fresh read arrives.
   func invalidateBrightnessAfterWake() {
+    scanGeneration &+= 1
+    brightnessReadGeneration &+= 1
+    isAwaitingTopology = true
     mediaKeys.resetPressedKeys()
     hotkeys.resetPressedKeys()
     discardKeyboardSteps()
@@ -424,6 +431,8 @@ final class DisplayBarController: NSObject, ObservableObject {
     refreshTask?.cancel()
     refreshTask = nil
     brightnessByID = [:]
+    intendedByID = [:]
+    intents.prune(keeping: [])
     readFailureCounts.removeAll()
     for display in displays {
       guard let id = display.stableID, let failure = failures[id] else { continue }

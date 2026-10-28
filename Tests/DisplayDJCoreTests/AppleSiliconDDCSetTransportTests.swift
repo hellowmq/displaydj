@@ -36,12 +36,12 @@ extension AppleSiliconDDCTransportTests {
         .write(
           chipAddress: 0x37,
           dataAddress: 0x51,
-          bytes: [0x82, 0x01, 0x10, 0xFD]
+          bytes: [0x82, 0x01, 0x10, 0xAC]
         ),
         .write(
           chipAddress: 0x37,
           dataAddress: 0x51,
-          bytes: [0x82, 0x01, 0x10, 0xFD]
+          bytes: [0x82, 0x01, 0x10, 0xAC]
         ),
       ]
     )

@@ -32,7 +32,7 @@ extension DisplayBarController {
   /// Deliberately independent of whether a reading succeeded: a failed read must not lock
   /// the controls, otherwise the user loses the only path back exactly when they need it.
   func canControl(_ stableID: String) -> Bool {
-    !stableID.isEmpty
+    !stableID.isEmpty && !isAwaitingTopology
   }
 
   /// Relative steps need a known starting point, so they — and only they — require a reading.

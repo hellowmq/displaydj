@@ -51,6 +51,10 @@ enum DisplayConnectionNoticePresenter {
       )
     }
 
+    if coded.details["reason"] == "superseded-recovery" {
+      return DisplayConnectionNotice(id: targetKey, summary: "这条恢复请求已过期",
+        suggestion: "请回到发起最新操作的应用恢复屏幕。原记录已保留。", technicalDetail: detail)
+    }
     return DisplayConnectionNotice(
       id: targetKey,
       summary: summary(for: coded.code, intent: intent, displayName: displayName),

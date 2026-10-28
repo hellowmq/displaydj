@@ -28,6 +28,45 @@ private struct UnreadableRecords: DisplayConnectionRecordStoring {
 @Suite("Full interaction state, selection and recovery")
 @MainActor
 struct FullInteractionTests {
+  @Test func wheelAfterWakeRescansAndNeverTransfersAnAbsentTargetToAnotherScreen() async throws {
+    let (controller, world) = await prepared()
+    let target = try #require(controller.displays.first { !$0.isBuiltIn })
+    let id = try #require(target.stableID)
+    let builtinID = try #require(controller.displays.first { $0.isBuiltIn }?.stableID)
+    controller.selectDisplay(key: id)
+    var writes: [Int] = []
+    controller.brightnessAccess.readDDC = { _ in 40 }
+    controller.brightnessAccess.writeDDC = { value, _ in writes.append(Int(value)); return value }
+    controller.invalidateBrightnessAfterWake()
+    await controller.adjustBrightnessViaScroll(by: 5)
+    #expect(writes == [45] && !controller.isAwaitingTopology)
+    let baseline = try await controller.brightnessAccess.read(stableID: builtinID)
+    controller.invalidateBrightnessAfterWake()
+    try world.setEnabled(false, forRuntimeID: target.runtimeID)
+    await controller.adjustBrightnessViaScroll(by: 5)
+    #expect(writes == [45])
+    #expect(try await controller.brightnessAccess.read(stableID: builtinID) == baseline)
+  }
+
+  @Test func wakeRejectsStaleReadAndKeyboardCanRescanWithPanelClosed() async throws {
+    let (controller, _) = await prepared()
+    let id = try #require(controller.displays.first { !$0.isBuiltIn }?.stableID)
+    let gate = WriteGate()
+    controller.brightnessAccess.readDDC = { _ in await gate.pause(); return 30 }
+    let read = Task { await controller.refreshDisplay(stableID: id, trigger: .userRequest) }
+    await gate.wait()
+    controller.invalidateBrightnessAfterWake()
+    #expect(controller.displayedBrightness(for: id) == nil && !controller.canControl(id))
+    await gate.resume(); await read.value
+    #expect(controller.displayedBrightness(for: id) == nil)
+    controller.brightnessAccess.readDDC = { _ in 40 }
+    controller.brightnessAccess.writeDDC = { value, _ in value }
+    controller.enqueueKeyboardBrightness(by: 5, for: id)
+    await controller.keyboardTask?.value
+    #expect(controller.displayedBrightness(for: id) == 45)
+    #expect(!controller.isAwaitingTopology)
+  }
+
   private func prepared() async -> (DisplayBarController, FullInteractionPreview) {
     let controller = DisplayBarController()
     let world = FullInteractionPreview(count: 2)

@@ -93,7 +93,8 @@ extension DisplayBarController {
   }
 
   func scheduleTopologyRescan() {
-    brightnessHUD.hideAll()
+    invalidateBrightnessAfterWake()
+    wakeRefreshTask?.cancel()
     topologyRefreshTask?.cancel()
     topologyRefreshTask = Task { @MainActor [weak self] in
       try? await Task.sleep(for: .milliseconds(400))

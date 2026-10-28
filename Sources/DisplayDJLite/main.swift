@@ -15,6 +15,7 @@ final class LiteApplication: NSObject, NSApplicationDelegate, NSPopoverDelegate 
   private var isCheckingQuit = false
   private var canTerminate = false
   private var isConfirmingConnection = false
+  private var wakeObservers: [NSObjectProtocol] = []
   private let guardian = LiteRecoveryGuardian()
 
   func applicationDidFinishLaunching(_ notification: Notification) {
@@ -39,7 +40,8 @@ final class LiteApplication: NSObject, NSApplicationDelegate, NSPopoverDelegate 
       access = preview
       brightnessAccess = preview
     } else {
-      access = LiteConnectionService.live(ensureRecoveryProtection: { [guardian] in try await guardian.ensureStarted() })
+      access = LiteConnectionService.live(ownerID: guardian.ownerID,
+        ensureRecoveryProtection: { [guardian] in try await guardian.ensureStarted() })
       brightnessAccess = LiteHardwareBrightnessAccess()
     }
     let model = LiteModel(access: access, brightnessAccess: brightnessAccess)
@@ -59,6 +61,12 @@ final class LiteApplication: NSObject, NSApplicationDelegate, NSPopoverDelegate 
     popover.behavior = .transient
     popover.delegate = self
     if !isPreview {
+      for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
+        wakeObservers.append(NSWorkspace.shared.notificationCenter.addObserver(
+          forName: name, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.scheduleRefresh() }
+          })
+      }
       topology.start { [weak self] _ in
         Task { @MainActor in self?.scheduleRefresh() }
       }
@@ -86,11 +94,18 @@ final class LiteApplication: NSObject, NSApplicationDelegate, NSPopoverDelegate 
   }
 
   private func scheduleRefresh() {
+    model?.invalidateForTopologyChange()
     delayedRefresh?.cancel()
     delayedRefresh = Task { @MainActor [weak self] in
       try? await Task.sleep(for: .milliseconds(400))
       guard !Task.isCancelled else { return }
-      await self?.model?.refresh()
+      guard let self else { return }
+      for attempt in 0..<3 {
+        guard !Task.isCancelled else { return }
+        await model?.refresh()
+        guard model?.needsLifecycleRetry == true, attempt < 2 else { return }
+        do { try await Task.sleep(for: .milliseconds(800)) } catch { return }
+      }
     }
   }
 
@@ -168,8 +183,10 @@ final class LiteApplication: NSObject, NSApplicationDelegate, NSPopoverDelegate 
 // creating NSApplication, a menu item, topology callbacks or another guardian.
 if let index = CommandLine.arguments.firstIndex(of: "--recovery-guardian") {
   guard CommandLine.arguments.indices.contains(index + 1),
-        let parent = Int32(CommandLine.arguments[index + 1]) else { exit(2) }
-  Task { @MainActor in exit(await LiteRecoveryGuardian.run(parentPID: parent)) }
+        let parent = Int32(CommandLine.arguments[index + 1]),
+        CommandLine.arguments.indices.contains(index + 2),
+        let ownerID = UUID(uuidString: CommandLine.arguments[index + 2]) else { exit(2) }
+  Task { @MainActor in exit(await LiteRecoveryGuardian.run(parentPID: parent, ownerID: ownerID)) }
   RunLoop.main.run()
   exit(2)
 }

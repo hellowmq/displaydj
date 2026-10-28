@@ -266,9 +266,9 @@ extension AppleSiliconDDCTransport {
     }
   }
 
-  /// Converts a transport-neutral Get or Set VCP frame into the IOAV packet
-  /// shape used by MonitorControl. IOAV receives 0x51 separately as the data
-  /// address. Get omits that byte from its checksum seed; Set retains it.
+  /// Converts a transport-neutral Get or Set VCP frame into the IOAV
+  /// packet shape used by IOAV. The separately supplied 0x51 data address still
+  /// participates in the DDC checksum for both Get and Set requests.
   private static func ioavRequest(
     for request: DDCTransportRequest
   ) throws -> AppleSiliconIOAVRequest {
@@ -317,11 +317,7 @@ extension AppleSiliconDDCTransport {
       operation: "validate-get-request-checksum"
     )
 
-    var packet = Array(request.logicalFrame.dropFirst())
-    packet[packet.count - 1] = checksum(
-      seed: ddcWriteAddress,
-      bytes: packet.dropLast()
-    )
+    let packet = Array(request.logicalFrame.dropFirst())
     return AppleSiliconIOAVRequest(
       packet: packet,
       replyCapacity: request.replyCapacity
@@ -342,11 +338,7 @@ extension AppleSiliconDDCTransport {
       operation: "validate-set-request-checksum"
     )
 
-    var packet = Array(request.logicalFrame.dropFirst())
-    packet[packet.count - 1] = checksum(
-      seed: ddcWriteAddress ^ hostSourceAddress,
-      bytes: packet.dropLast()
-    )
+    let packet = Array(request.logicalFrame.dropFirst())
     return AppleSiliconIOAVRequest(packet: packet, replyCapacity: 0)
   }
 

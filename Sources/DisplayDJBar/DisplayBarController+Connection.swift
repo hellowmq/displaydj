@@ -22,24 +22,27 @@ extension DisplayBarController {
 
   /// Rebuilds the list of displays this tool disconnected.
   func refreshDisconnectedDisplays() {
-    do {
-      let saved = try connectionStore.loadRecords()
-      let records = saved.map { record -> DisplayConnectionRecord in
-        guard record.requiresRediscovery != true,
-              !connectionTopology.contains(where: { $0.stableID == record.stableID && record.stableID != nil }) else { return record }
-        var boot = timeval(); var size = MemoryLayout<timeval>.size
-        let knowsBoot = sysctlbyname("kern.boottime", &boot, &size, nil, 0) == 0
-        let reused = connectionTopology.contains { $0.runtimeID == record.runtimeID }
-        guard reused || (knowsBoot && record.disconnectedAt < Date(timeIntervalSince1970: Double(boot.tv_sec))) else { return record }
-        return .init(runtimeID: record.runtimeID, stableID: record.stableID, name: record.name,
-          disconnectedAt: record.disconnectedAt, requiresRediscovery: true)
-      }
-      if records != saved { try connectionStore.saveRecords(records) }
-      disconnectedDisplays = records.sorted { $0.disconnectedAt < $1.disconnectedAt }
-      connectionRecordError = nil
-    } catch {
-      connectionRecordError = "恢复记录无法读取或保存，已暂停连接操作。原记录仍保留，请刷新重试。"
+    do { try DisplayConnectionCoordinator.shared.withImmediateLock { try reconcileDisconnectedDisplays() } }
+    catch { connectionRecordError = "恢复状态暂时无法读取或核验，原记录仍保留。请稍后刷新重试。" }
+  }
+
+  private func reconcileDisconnectedDisplays() throws {
+    let saved = try connectionStore.loadRecords()
+    let records = try saved.map { record -> DisplayConnectionRecord in
+      guard record.requiresRediscovery != true,
+            !connectionTopology.contains(where: { $0.stableID == record.stableID && record.stableID != nil }) else { return record }
+      var boot = timeval(); var size = MemoryLayout<timeval>.size
+      let knowsBoot = sysctlbyname("kern.boottime", &boot, &size, nil, 0) == 0
+      let reused = connectionTopology.contains { $0.runtimeID == record.runtimeID }
+      let superseded = try DisplayConnectionCoordinator.shared.isSuperseded(record)
+      guard superseded || reused || (knowsBoot && record.disconnectedAt < Date(timeIntervalSince1970: Double(boot.tv_sec))) else { return record }
+      return .init(runtimeID: record.runtimeID, stableID: record.stableID, name: record.name,
+        disconnectedAt: record.disconnectedAt, requiresRediscovery: true,
+        operationID: record.operationID, ownerID: record.ownerID)
     }
+    if records != saved { try connectionStore.saveRecords(records) }
+    disconnectedDisplays = records.sorted { $0.disconnectedAt < $1.disconnectedAt }
+    connectionRecordError = nil
   }
 
   /// Whether the given display can be disconnected from here.
@@ -211,6 +214,8 @@ extension DisplayBarController {
       }
       connectionNotice = nil
     } catch {
+      SupportDiagnosticEvents.shared.record(error, operation: state == .connected ? .restore : .write,
+        stableID: targetKey)
       connectionNotice = DisplayConnectionNoticePresenter.notice(
         for: error,
         intent: state,

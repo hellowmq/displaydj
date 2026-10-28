@@ -1,4 +1,5 @@
 import DisplayDJUI
+import DisplayDJCore
 import SwiftUI
 
 struct LiteView: View {
@@ -73,6 +74,8 @@ struct LiteView: View {
                 Text("断开前会启动退出恢复保护。主界面异常结束后，恢复子进程会尝试重新连接并结束；若仍无画面，请重新接线、在系统设置中检测，必要时重启 Mac。")
               }
               Text("内建屏、镜像屏及最后一块在线屏幕受到保护。")
+              DiagnosticExportButton(product: .lite, version: LiteIdentity.version,
+                store: FileDisplayConnectionRecordStore(fileURL: LiteIdentity.recordURL()), simulated: isPreview)
               if !isPreview {
                 Link("恢复、覆盖安装与卸载说明", destination: URL(string: "https://github.com/hellowmq/displaydj/blob/master/docs/LITE-RECOVERY.md")!)
               }
@@ -183,7 +186,7 @@ private struct LiteDisplayRowView: View {
             actionButton.buttonStyle(.bordered)
           }
         }
-        .disabled(model.isBusy || model.error != nil || row.refusal != nil)
+        .disabled(!model.canChangeConnection || model.error != nil || row.refusal != nil)
         .accessibilityLabel("\(isPreview ? "模拟" : "")\(actionTitle) \(row.name)")
         .help(row.action == .disconnected ? "将这块屏幕从当前 Mac 的桌面中移除" : "恢复这块屏幕在当前 Mac 上的桌面连接")
       }

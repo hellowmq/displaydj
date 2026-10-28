@@ -13,7 +13,7 @@
 
 | 项目 | Full | Lite |
 | --- | --- | --- |
-| 当前版本源 | `Version.current`，当前 1.0.2 | `LiteIdentity.version`，当前 0.1.0 |
+| 当前版本源 | `Version.current`，当前 1.1.0 | `LiteIdentity.version`，当前 0.2.0 |
 | 标签规则 | 保留 `v<version>` | 新发布使用 `lite-v<version>` |
 | App 文件名 | `DisplayDJ.app` | `DisplayDJLite.app` |
 | 资产前缀 | `displaydj-<version>-macos-<arch>` | `displaydj-lite-<version>-macos-<arch>` |
@@ -75,7 +75,7 @@ CI 验证共享测试、Full 构建及 CLI smoke、Lite 构建及 bundle smoke�
 - [ ] 用户授权提交、推送及公开发布后执行相应步骤；不强推或改写历史。
 - [ ] 发布后回读产品专属 Release 及下载字节/校验和，确认下载入口没有跳到另一产品；记录旧版本回滚办法。
 
-当前交付：Full 1.0.2 和 Lite 0.1.0 于 2026-10-25 按明确授权原位更新，Lite 保持预发布。Lite 的 Dell 恢复证据、内建屏亮度证据及两版交互/分发验证各自记录，不能互相替代，见 [更新记录](RELEASE-REFRESH-2026-10-25.md)。
+历史交付：Full 1.0.2 和 Lite 0.1.0 于 2026-10-25 按明确授权原位更新，Lite 保持预发布。Lite 的 Dell 恢复证据、内建屏亮度证据及两版交互/分发验证各自记录，不能互相替代，见 [更新记录](RELEASE-REFRESH-2026-10-25.md)。
 
 ## 问题反馈与回滚
 
@@ -88,3 +88,5 @@ Issue 先写产品与版本、macOS/架构、显示器及接线概况、预期�
 Lite 0.1.0 的恢复要求进一步收紧：正常退出必须恢复并核验，取消直接保留断开退出；新断开使用应用作用域，恢复连接提交到会话作用域，以处理旧断开基线。首发限制为有当前待恢复记录时不再断开另一台，完整边界和卸载步骤见 [LITE-RECOVERY.md](LITE-RECOVERY.md)。
 
 Lite 0.1.0：断开前必须确认恢复子进程的父进程退出监视器就绪；不能仅依赖 `forAppOnly`。已确认旧编号被复用的未接入历史记录保留、禁止盲目启用，不阻塞当前屏幕操作和退出。实体证据见 [LITE-DEVICE-VERIFICATION.md](LITE-DEVICE-VERIFICATION.md)。
+
+2026-10-29：Full 1.1.0 与 Lite 0.2.0 使用新标签和新资产分别交付，Lite 保持预发布；不覆盖旧版标签或下载。验证范围与剩余设备边界见 [本次发布记录](RELEASE-2026-10-29.md)。

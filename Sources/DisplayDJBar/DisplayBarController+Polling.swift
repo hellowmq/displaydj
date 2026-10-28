@@ -103,7 +103,7 @@ extension DisplayBarController {
   /// pressed in a session where the popover had never been opened had no topology to resolve
   /// a target against.
   func refreshSelectedDisplayOnDemand() async {
-    if displays.isEmpty {
+    if displays.isEmpty || isAwaitingTopology {
       await scanAndRefresh()
     }
     guard let display = selectedDisplay else { return }
@@ -193,9 +193,10 @@ extension DisplayBarController {
   /// previously the whole-topology loop discarded a failing display's stale reading nowhere
   /// and reported nothing unless the display happened to be selected.
   private func read(stableID: String) async {
+    let generation = brightnessReadGeneration
     do {
       let value = try await brightnessAccess.read(stableID: stableID)
-      guard !Task.isCancelled else { return }
+      guard !Task.isCancelled, generation == brightnessReadGeneration else { return }
       applyReadValue(value, stableID: stableID)
       readFailureCounts.removeValue(forKey: stableID)
       // This display now has a good reading, so its own banner is stale. Every other
@@ -206,7 +207,8 @@ extension DisplayBarController {
       // routine bookkeeping — not something the display did. Surfacing it would accuse a
       // healthy monitor of failing, and discarding the reading below would disable its `±`
       // buttons, so the last known value stands until a real read replaces it.
-      if Task.isCancelled || BrightnessFailurePresenter.isCancellation(error) { return }
+      if Task.isCancelled || generation != brightnessReadGeneration || BrightnessFailurePresenter.isCancellation(error) { return }
+      SupportDiagnosticEvents.shared.record(error, operation: .read, stableID: stableID)
       // A stale number is worse than none: it claims a reading that no longer holds.
       if intents.latestValue(for: stableID) == nil {
         setBrightnessForDisplay(nil, id: stableID)

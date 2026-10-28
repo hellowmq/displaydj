@@ -18,7 +18,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "DisplayDJCore"),
-        .target(name: "DisplayDJUI"),
+        .target(name: "DisplayDJUI", dependencies: ["DisplayDJCore", "VibeDisplayCore"]),
         .target(name: "VibeDisplayCore", dependencies: ["DisplayDJCore"],
                 swiftSettings: [.swiftLanguageMode(.v5)],
                 linkerSettings: [.linkedFramework("IOKit"), .linkedFramework("CoreGraphics"), .linkedFramework("AppKit")]),

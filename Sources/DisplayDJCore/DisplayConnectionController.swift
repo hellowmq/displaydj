@@ -119,6 +119,8 @@ public struct DisplayConnectionController: Sendable {
   private let ledger: DisplayConnectionIntentLedger
   private let verificationAttempts: Int
   private let verificationDelay: Duration
+  private let coordinator: DisplayConnectionCoordinator?
+  private let recoveryOwnerID: UUID?
 
   public init(
     discovery: any DisplayDiscovering,
@@ -128,7 +130,9 @@ public struct DisplayConnectionController: Sendable {
     safety: DisplayConnectionSafety = DisplayConnectionSafety(),
     ledger: DisplayConnectionIntentLedger = .shared,
     verificationAttempts: Int = 25,
-    verificationDelay: Duration = .milliseconds(200)
+    verificationDelay: Duration = .milliseconds(200),
+    coordinator: DisplayConnectionCoordinator? = nil,
+    recoveryOwnerID: UUID? = nil
   ) {
     self.discovery = discovery
     self.transaction = transaction
@@ -138,13 +142,16 @@ public struct DisplayConnectionController: Sendable {
     self.ledger = ledger
     self.verificationAttempts = max(1, verificationAttempts)
     self.verificationDelay = verificationDelay
+    self.coordinator = coordinator
+    self.recoveryOwnerID = recoveryOwnerID
   }
 
   /// The production controller, using live discovery and the private entry point.
   public static func live(
     store: any DisplayConnectionRecordStoring = FileDisplayConnectionRecordStore(),
     disconnectionLifetime: DisplayDisconnectionLifetime = .loginSession,
-    verificationAttempts: Int = 25
+    verificationAttempts: Int = 25,
+    recoveryOwnerID: UUID? = nil
   ) throws -> DisplayConnectionController {
     DisplayConnectionController(
       discovery: CoreGraphicsDisplayDiscovery(),
@@ -153,7 +160,9 @@ public struct DisplayConnectionController: Sendable {
         disconnectionLifetime: disconnectionLifetime
       ),
       store: store,
-      verificationAttempts: verificationAttempts
+      verificationAttempts: verificationAttempts,
+      coordinator: .shared,
+      recoveryOwnerID: recoveryOwnerID
     )
   }
 
@@ -161,6 +170,14 @@ public struct DisplayConnectionController: Sendable {
     _ state: DisplayConnectionState,
     for selector: DisplaySelector
   ) async throws -> DisplayConnectionOutcome {
+    if let coordinator {
+      return try await coordinator.withLock { try await setStateUnlocked(state, for: selector) }
+    }
+    return try await setStateUnlocked(state, for: selector)
+  }
+
+  private func setStateUnlocked(_ state: DisplayConnectionState,
+    for selector: DisplaySelector) async throws -> DisplayConnectionOutcome {
     switch state {
     case .disconnected:
       return try await disconnect(selector)
@@ -190,12 +207,23 @@ public struct DisplayConnectionController: Sendable {
     // Save recovery identity before touching the desktop. A transaction can
     // mutate the display and still fail or publish topology late; the record
     // must survive that ambiguous result so a later connect can find it.
-    try remember(online)
+    let operationID = UUID()
+    try remember(online, operationID: operationID)
+    if let coordinator, let id = online.stableID {
+      try coordinator.note(stableID: id, intent: .init(operationID: operationID,
+        runtimeID: online.runtimeID, updatedAt: Date()))
+    }
     // Announced before the call: the reconfiguration it emits lands on another
     // thread, and may arrive while this call is still running.
     ledger.noteIntent(runtimeID: online.runtimeID)
-    try transaction.setEnabled(false, forRuntimeID: online.runtimeID)
-    try await requireAbsent(online.runtimeID, selector: selector)
+    do {
+      try transaction.setEnabled(false, forRuntimeID: online.runtimeID)
+      try await requireAbsent(online.runtimeID, selector: selector)
+    } catch {
+      try coordinator?.finishIntent(for: online.stableID)
+      throw error
+    }
+    try coordinator?.finishIntent(for: online.stableID)
 
     return DisplayConnectionOutcome(
       display: online,
@@ -226,9 +254,18 @@ public struct DisplayConnectionController: Sendable {
     }
 
     let runtimeID = try offlineRuntimeID(for: selector)
+    let record = try store.loadRecords().first { $0.runtimeID == runtimeID }
+    if let coordinator, let record, try coordinator.isSuperseded(record) {
+      throw DisplayDJError(code: .conflict, message: "恢复请求已过期，目标由较新的连接操作管理。", details: ["reason": "superseded-recovery"])
+    }
     ledger.noteIntent(runtimeID: runtimeID)
     try transaction.setEnabled(true, forRuntimeID: runtimeID)
     let restored = try await requirePresent(runtimeID, selector: selector)
+
+    if let coordinator, let id = restored.stableID {
+      try coordinator.note(stableID: id, intent: .init(operationID: record?.operationID ?? UUID(),
+        runtimeID: runtimeID, updatedAt: Date()))
+    }
 
     try forget(runtimeID: runtimeID, stableID: restored.stableID)
 
@@ -308,8 +345,8 @@ public struct DisplayConnectionController: Sendable {
     for selector: DisplaySelector,
     among displays: [DisplayDescriptor]
   ) throws -> DisplayDescriptor? {
-    let matches = try? selectorResolver.resolve(selector, among: displays)
-    return matches?.first
+    do { return try selectorResolver.resolve(selector, among: displays).first }
+    catch let error as DisplayDJError where error.code == .displayNotFound { return nil }
   }
 
   /// Recovers the runtime ID of a display that is no longer online.
@@ -363,14 +400,16 @@ public struct DisplayConnectionController: Sendable {
 
   // MARK: - Records
 
-  private func remember(_ display: DisplayDescriptor) throws {
+  private func remember(_ display: DisplayDescriptor, operationID: UUID) throws {
     var records = try store.loadRecords()
     records.removeAll { Self.matches($0, runtimeID: display.runtimeID, stableID: display.stableID) }
     records.append(
       DisplayConnectionRecord(
         runtimeID: display.runtimeID,
         stableID: display.stableID,
-        name: display.name
+        name: display.name,
+        operationID: coordinator == nil ? nil : operationID,
+        ownerID: recoveryOwnerID
       )
     )
 

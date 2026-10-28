@@ -61,6 +61,15 @@ private final class Clock: @unchecked Sendable {
 
 @Suite("Physical connection changes release a disable")
 struct DisplayConnectionAutoReleaseTests {
+  @Test func aRemovalCallbackCannotClearARecordWhenTheDisplayIsStillActive() throws {
+    let driver = FakeDisplayDriver(); driver.activeIDs = [3]
+    let record = DisplayConnectionRecord(runtimeID: 3, stableID: "uuid:a", name: "Desk")
+    let store = InMemoryDisplayConnectionRecordStore(records: [record])
+    let release = DisplayConnectionAutoRelease(transaction: driver, store: store, runtimeStatus: driver, ledger: .init())
+    #expect(try release.handle(.init(runtimeID: 3, kind: .removed)) == nil)
+    #expect(try store.loadRecords() == [record])
+  }
+
   private func makeRelease(
     driver: FakeDisplayDriver,
     records: [DisplayConnectionRecord],

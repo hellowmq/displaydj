@@ -28,10 +28,16 @@ for size in 16 32 128 256 512; do
 done
 iconutil -c icns "$iconset" -o "$app/Contents/Resources/DisplayDJ.icns"
 python3 - "$app" "$version" <<'PY'
-import plistlib,sys,pathlib
+import plistlib,sys,pathlib,subprocess
 app=pathlib.Path(sys.argv[1])
+try:
+    revision = subprocess.check_output(['git', 'rev-parse', '--short=12', 'HEAD'], text=True, stderr=subprocess.DEVNULL).strip()
+    if subprocess.check_output(['git', 'status', '--porcelain'], text=True, stderr=subprocess.DEVNULL).strip():
+        revision += '-dirty'
+except subprocess.CalledProcessError:
+    revision = 'source-archive'
 with (app/'Contents/Info.plist').open('wb') as f:
- plistlib.dump(dict(CFBundleExecutable='DisplayDJBar',CFBundleIdentifier='io.github.hellowmq.displaydj',CFBundleName='DisplayDJ',CFBundleDisplayName='DisplayDJ',CFBundleIconFile='DisplayDJ.icns',CFBundleVersion=sys.argv[2],CFBundleShortVersionString=sys.argv[2],CFBundlePackageType='APPL',LSMinimumSystemVersion='13.0',LSUIElement=True,NSHighResolutionCapable=True,NSHumanReadableCopyright='MIT; DisplayDJ, VibeDisplay and MonitorControl contributors'),f)
+ plistlib.dump(dict(CFBundleExecutable='DisplayDJBar',CFBundleIdentifier='io.github.hellowmq.displaydj',CFBundleName='DisplayDJ',CFBundleDisplayName='DisplayDJ',CFBundleIconFile='DisplayDJ.icns',CFBundleVersion=sys.argv[2],CFBundleShortVersionString=sys.argv[2],CFBundlePackageType='APPL', DisplayDJSourceRevision=revision,LSMinimumSystemVersion='13.0',LSUIElement=True,NSHighResolutionCapable=True,NSHumanReadableCopyright='MIT; DisplayDJ, VibeDisplay and MonitorControl contributors'),f)
 PY
 sign_identity="${DISPLAYDJ_SIGN_IDENTITY:--}"
 sign_args=(--force --sign "$sign_identity")

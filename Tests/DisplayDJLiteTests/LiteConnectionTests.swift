@@ -102,6 +102,20 @@ private actor GatedAccess: LiteConnectionAccess {
 @Suite("Lite connection safety, verified state and coexistence")
 @MainActor
 struct LiteConnectionTests {
+  @Test func guardianCanOnlySeeAndRestoreItsParentsRecords() async throws {
+    let world = LiteWorld([builtIn, external()], active: [1])
+    let oldOwner = UUID(); let newOwner = UUID()
+    let old = DisplayConnectionRecord(runtimeID: 2, stableID: a, name: "Desk", ownerID: oldOwner)
+    let store = InMemoryDisplayConnectionRecordStore(records: [old])
+    var access = service(world, store: store)
+    access.recoveryOwnerFilter = newOwner
+    #expect(try await access.snapshot().pendingRecords.isEmpty)
+    do { _ = try await access.change(.connected, stableID: a); Issue.record("Guardian restored another parent's target") }
+    catch { #expect(error is LiteRefusal) }
+    #expect(world.applied.isEmpty)
+    #expect(try store.loadRecords() == [old])
+  }
+
   @Test func anotherDisableIsBlockedUntilSavedRecoveryIsComplete() async throws {
     let world = LiteWorld([builtIn, external(), external(3, stableID: b)])
     let store = InMemoryDisplayConnectionRecordStore()

@@ -4,6 +4,7 @@ import OSLog
 import SwiftUI
 import VibeDisplayCore
 import DisplayDJCore
+import DisplayDJUI
 
 private let softwareDimmingLogger = Logger(
     subsystem: "io.github.hellowmq.displaydj", category: "SoftwareDimming"
@@ -382,6 +383,15 @@ struct DisplayToolsView: View {
                         ToolsSection("亮度快捷键") {
                             HotkeySettingsRow(controller: controller, compact: false)
                                 .disabled(controller.isInteractionPreview)
+                        }
+
+                        ToolsSection("诊断") {
+                            DiagnosticExportButton(product: .full, version: VibeVersion.current,
+                              store: controller.connectionStore,
+                              keyboard: .init(hotkeysEnabled: controller.hotkeysEnabled,
+                                mediaKeysEnabled: controller.mediaKeysEnabled,
+                                accessibilityGranted: controller.hasAccessibilityPermission),
+                              simulated: controller.isInteractionPreview)
                         }
 
                         Text("操作偏好对所有显示器生效；打开设置不会请求辅助功能权限。")

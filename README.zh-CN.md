@@ -12,7 +12,7 @@
 
 `macOS 13+ target` · `Swift 6` · `Apple Silicon DDC/CI` · `MIT`
 
-[下载完整版 1.0.2](https://github.com/hellowmq/displaydj/releases/tag/v1.0.2) · [Lite 0.1.0 预发布](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.1.0) · [快速开始](#快速开始) · [CLI / HTTP 参考](docs/API.md)
+[下载完整版 1.1.0](https://github.com/hellowmq/displaydj/releases/tag/v1.1.0) · [Lite 0.2.0 预发布](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.2.0) · [快速开始](#快速开始) · [CLI / HTTP 参考](docs/API.md)
 
 </div>
 
@@ -20,19 +20,19 @@
 
 | 产品 | 范围 | 状态 |
 | --- | --- | --- |
-| **DisplayDJ 完整版** | 亮度、显示设置、连接控制、CLI 与可选本地服务 | [下载 1.0.2](https://github.com/hellowmq/displaydj/releases/tag/v1.0.2) |
-| **DisplayDJ Lite** | 内建屏亮度、支持的外屏 DDC 亮度，以及外屏断开、重新连接和恢复记录 | [下载 0.1.0 预发布版](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.1.0) · [验证记录](docs/DISPLAYDJ-LITE.md) |
+| **DisplayDJ 完整版** | 亮度、显示设置、连接控制、CLI 与可选本地服务 | [下载 1.1.0](https://github.com/hellowmq/displaydj/releases/tag/v1.1.0) |
+| **DisplayDJ Lite** | 内建屏亮度、支持的外屏 DDC 亮度，以及外屏断开、重新连接和恢复记录 | [下载 0.2.0 预发布版](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.2.0) · [验证记录](docs/DISPLAYDJ-LITE.md) |
 
 基础亮度和显示器连接选 Lite；显示设置、自动化和 CLI 选完整版。两者 App 身份、恢复数据和版本独立。参见[维护与发布标准](docs/MAINTENANCE.md)、[贡献说明](CONTRIBUTING.md)和[交互一致性契约](docs/INTERACTION-CONTRACT.md)。
 
-| DisplayDJ Full 1.0.2 | DisplayDJ Lite 0.1.0（预发布） |
+| DisplayDJ Full 1.1.0 | DisplayDJ Lite 0.2.0（预发布） |
 | :---: | :---: |
 | <img src="Assets/Previews/DisplayDJ-1.0.2-2026-10-25.jpg" alt="Full 1.0.2：真实内建屏亮度界面" width="320"> | <img src="Assets/Previews/DisplayDJLite-0.1.0-2026-10-25.jpg" alt="Lite 0.1.0：真实内建屏亮度与未接入历史记录" width="320"> |
-| [ZIP](https://github.com/hellowmq/displaydj/releases/download/v1.0.2/displaydj-1.0.2-macos-arm64.zip) · [DMG](https://github.com/hellowmq/displaydj/releases/download/v1.0.2/displaydj-1.0.2-macos-arm64.dmg) · [ZIP SHA-256](https://github.com/hellowmq/displaydj/releases/download/v1.0.2/displaydj-1.0.2-macos-arm64.zip.sha256) · [DMG SHA-256](https://github.com/hellowmq/displaydj/releases/download/v1.0.2/displaydj-1.0.2-macos-arm64.dmg.sha256) | [ZIP](https://github.com/hellowmq/displaydj/releases/download/lite-v0.1.0/displaydj-lite-0.1.0-macos-arm64.zip) · [DMG](https://github.com/hellowmq/displaydj/releases/download/lite-v0.1.0/displaydj-lite-0.1.0-macos-arm64.dmg) · [ZIP SHA-256](https://github.com/hellowmq/displaydj/releases/download/lite-v0.1.0/displaydj-lite-0.1.0-macos-arm64.zip.sha256) · [DMG SHA-256](https://github.com/hellowmq/displaydj/releases/download/lite-v0.1.0/displaydj-lite-0.1.0-macos-arm64.dmg.sha256) |
+| [ZIP](https://github.com/hellowmq/displaydj/releases/download/v1.1.0/displaydj-1.1.0-macos-arm64.zip) · [DMG](https://github.com/hellowmq/displaydj/releases/download/v1.1.0/displaydj-1.1.0-macos-arm64.dmg) · [ZIP SHA-256](https://github.com/hellowmq/displaydj/releases/download/v1.1.0/displaydj-1.1.0-macos-arm64.zip.sha256) · [DMG SHA-256](https://github.com/hellowmq/displaydj/releases/download/v1.1.0/displaydj-1.1.0-macos-arm64.dmg.sha256) | [ZIP](https://github.com/hellowmq/displaydj/releases/download/lite-v0.2.0/displaydj-lite-0.2.0-macos-arm64.zip) · [DMG](https://github.com/hellowmq/displaydj/releases/download/lite-v0.2.0/displaydj-lite-0.2.0-macos-arm64.dmg) · [ZIP SHA-256](https://github.com/hellowmq/displaydj/releases/download/lite-v0.2.0/displaydj-lite-0.2.0-macos-arm64.zip.sha256) · [DMG SHA-256](https://github.com/hellowmq/displaydj/releases/download/lite-v0.2.0/displaydj-lite-0.2.0-macos-arm64.dmg.sha256) |
 
 2026-10-25 构建的真实应用界面。截图展示本机内建屏；保存的 HP 未接入记录不表示设备在线，也不证明外屏 DDC 支持。
 
-两款下载已于 **2026-10-25 原位更新**，沿用原标签和文件名。Lite 新增硬件亮度调节；Full 改善逐屏反馈与设置组织。两版均使用等宽亮度数字和短促的原生刷新动画。此前下载过同版本的用户请重新下载，并使用新的 SHA-256 校验文件。见[本次更新与验证](docs/RELEASE-REFRESH-2026-10-25.md)。
+**2026-10-29：Full 1.1.0 / Lite 0.2.0 预发布。** 修复 DDC 查询校验，增加默认脱敏的本地诊断导出，改进唤醒、拓扑变化及连接恢复协调。两版已安装 App 均完成 H27T22S 真实亮度调节与恢复。[发布验证与限制](docs/RELEASE-2026-10-29.md)。
 
 Lite 正常退出须先确认当前目标恢复；断开前会确认恢复子进程已就绪，用于主界面异常结束后的恢复。Dell 的普通重连、恢复退出及强制结束恢复已通过实机核验；旧 HP 未接入记录仍保留。覆盖安装不会删除恢复记录，卸载前请先恢复并退出，见[恢复与卸载说明](docs/LITE-RECOVERY.md)。
 
@@ -68,11 +68,11 @@ DisplayDJ 把“连接状态”也变成显示器控制的一部分，而不只�
 
 ### 下载 App
 
-只需基础亮度和显示器连接，可下载 [Lite 0.1.0](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.1.0)，将 `DisplayDJLite.app` 放入 `/Applications`。Lite 仍为预发布版。覆盖任一应用前，先恢复当前外屏并正常退出；两款 App 分别安装。
+只需基础亮度和显示器连接，可下载 [Lite 0.2.0](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.2.0)，将 `DisplayDJLite.app` 放入 `/Applications`。Lite 仍为预发布版。覆盖任一应用前，先恢复当前外屏并正常退出；两款 App 分别安装。
 
-从 [完整版 1.0.2](https://github.com/hellowmq/displaydj/releases/tag/v1.0.2) 下载 arm64 ZIP 或 DMG。安装包同时包含 `DisplayDJ.app`、独立的 `display-cli` 和兼容旧脚本的 `displaydj` 命令。
+从 [完整版 1.1.0](https://github.com/hellowmq/displaydj/releases/tag/v1.1.0) 下载 arm64 ZIP 或 DMG。安装包同时包含 `DisplayDJ.app`、独立的 `display-cli` 和兼容旧脚本的 `displaydj` 命令。
 
-当前下载包仅支持 Apple Silicon，采用 ad-hoc 签名，尚未经过 Developer ID 签名和 Apple 公证，因此 macOS 可能阻止首次启动。可在 Finder 中按住 Control 点击 DisplayDJ 并选择“打开”，或前往“系统设置 → 隐私与安全性”允许打开。全局快捷键和可选亮度媒体键需要辅助功能权限。覆盖 ad-hoc 签名 App 后若全局按键失效，请移除旧授权条目，再添加准确的 `/Applications/DisplayDJ.app`；若系统要求输入监控，也请允许，完成后退出并重新打开 DisplayDJ。完整安装说明与兼容边界见[发布说明](docs/RELEASE-NOTES-1.0.2.md)。
+当前下载包仅支持 Apple Silicon，采用 ad-hoc 签名，尚未经过 Developer ID 签名和 Apple 公证，因此 macOS 可能阻止首次启动。可在 Finder 中按住 Control 点击 DisplayDJ 并选择“打开”，或前往“系统设置 → 隐私与安全性”允许打开。全局快捷键和可选亮度媒体键需要辅助功能权限。覆盖 ad-hoc 签名 App 后若全局按键失效，请移除旧授权条目，再添加准确的 `/Applications/DisplayDJ.app`；若系统要求输入监控，也请允许，完成后退出并重新打开 DisplayDJ。完整安装说明与兼容边界见[发布说明](docs/RELEASE-NOTES-1.1.0.md)。
 
 ### 安装命令行工具
 
@@ -235,7 +235,7 @@ bash scripts/package-dmg.sh
 - [架构与迁移](docs/ARCHITECTURE.md)
 - [来源与许可](docs/PROVENANCE.md)
 - [验证结果](docs/VALIDATION.md)
-- [1.0.2 发布说明](docs/RELEASE-NOTES-1.0.2.md)
+- [1.1.0 发布说明](docs/RELEASE-NOTES-1.1.0.md)
 - [1.0 验收清单](docs/RELEASE-1.0-CHECKLIST.md)
 - [设备分阶段验证](docs/DEVICE-VALIDATION.md)
 - [双屏界面验收步骤](docs/GUI-ACCEPTANCE-1.0.md)

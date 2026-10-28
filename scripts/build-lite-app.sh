@@ -24,8 +24,14 @@ for size in 16 32 128 256 512; do
 done
 iconutil -c icns "$iconset" -o "$app/Contents/Resources/DisplayDJLite.icns"
 python3 - "$app" <<'PY'
-import pathlib, plistlib, re, sys
+import pathlib, plistlib, re, sys, subprocess
 app = pathlib.Path(sys.argv[1])
+try:
+    revision = subprocess.check_output(['git', 'rev-parse', '--short=12', 'HEAD'], text=True, stderr=subprocess.DEVNULL).strip()
+    if subprocess.check_output(['git', 'status', '--porcelain'], text=True, stderr=subprocess.DEVNULL).strip():
+        revision += '-dirty'
+except subprocess.CalledProcessError:
+    revision = 'source-archive'
 source = pathlib.Path('Sources/DisplayDJLite/LiteConnectionService.swift').read_text()
 version = re.search(r'static let version = "([^"]+)"', source).group(1)
 identity = re.search(r'static let bundleID = "([^"]+)"', source).group(1)
@@ -34,7 +40,7 @@ with (app / 'Contents/Info.plist').open('wb') as stream:
                       CFBundleName='DisplayDJ Lite', CFBundleDisplayName='DisplayDJ Lite',
                       CFBundleIconFile='DisplayDJLite.icns',
                       CFBundleVersion=version, CFBundleShortVersionString=version,
-                      CFBundlePackageType='APPL', LSMinimumSystemVersion='13.0',
+                      CFBundlePackageType='APPL', DisplayDJSourceRevision=revision, LSMinimumSystemVersion='13.0',
                       LSUIElement=True, NSHighResolutionCapable=True), stream)
 PY
 sign_identity="${DISPLAYDJ_SIGN_IDENTITY:--}"

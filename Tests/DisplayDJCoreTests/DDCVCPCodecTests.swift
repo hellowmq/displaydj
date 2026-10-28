@@ -53,6 +53,18 @@ func replyChecksumUsesHostDestination() {
   #expect(xorChecksum(seed: 0x6F, bytes: payload) != 0xF2)
 }
 
+@Test("A captured H27T22S zero-brightness reply remains a valid hardware value")
+func capturedH27T22SZeroBrightnessReplyParses() throws {
+  let reply = try DDCVCPCodec.parseGetFeatureReply(
+    [0x6E, 0x88, 0x02, 0x00, 0x10, 0x00, 0x00, 0x64, 0x00, 0x00, 0xC0],
+    expectedFeatureCode: 0x10
+  )
+
+  #expect(reply == .value(DDCVCPFeatureValue(
+    featureCode: 0x10, valueType: .setParameter, maximumValue: 100, currentValue: 0
+  )))
+}
+
 @Test("Unsupported and unknown result codes never become successful values")
 func negativeGetVCPRepliesRemainExplicit() throws {
   let unsupported = responseMessage(

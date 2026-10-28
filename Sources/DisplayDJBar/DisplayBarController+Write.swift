@@ -18,7 +18,7 @@ extension DisplayBarController {
 
   func setBrightness(_ value: Int, for stableID: String, synchronize: Bool = true,
                      showKeyboardFeedback: Bool = false, relativeSteps: [Int]? = nil) async {
-    guard !displays.isEmpty, !isChangingConnection, !isRestoringConnections, !isCheckingQuit, !isConfirmingDisconnect else { return }
+    guard !displays.isEmpty, !isAwaitingTopology, !isChangingConnection, !isRestoringConnections, !isCheckingQuit, !isConfirmingDisconnect else { return }
     guard !isPreparingBrightnessSync else {
       failures.topology = BrightnessFailure(
         summary: "正在准备多屏同步",

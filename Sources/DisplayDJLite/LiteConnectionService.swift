@@ -5,7 +5,7 @@ import DisplayDJCore
 import Foundation
 
 enum LiteIdentity {
-  static let version = "0.1.0"
+  static let version = "0.2.0"
   static let bundleID = "io.github.hellowmq.displaydj.lite"
 
   static func recordURL(environment: [String: String] = ProcessInfo.processInfo.environment,
@@ -59,8 +59,11 @@ struct LiteConnectionService: LiteConnectionAccess {
   let runtimeIdentity: @Sendable (UInt32) -> LiteRuntimeIdentity?
   var recoveryCutoff: Date = .distantPast
   var ensureRecoveryProtection: @Sendable () async throws -> Void = {}
+  var coordinator: DisplayConnectionCoordinator?
+  var recoveryOwnerFilter: UUID?
 
-  static func live(ensureRecoveryProtection: @escaping @Sendable () async throws -> Void = {
+  static func live(ownerID: UUID? = nil, recoveryOwnerFilter: UUID? = nil,
+    ensureRecoveryProtection: @escaping @Sendable () async throws -> Void = {
     throw LiteRefusal("退出恢复保护未就绪，未断开显示器。")
   }) -> Self {
     let discovery = CoreGraphicsDisplayDiscovery()
@@ -68,7 +71,7 @@ struct LiteConnectionService: LiteConnectionAccess {
     // Physical link/wake-up can exceed the core's 5-second default. Keep the
     // UI pending for up to 15 seconds; still require the exact stable target.
     let controller = try? DisplayConnectionController.live(store: store,
-      disconnectionLifetime: .application, verificationAttempts: 75)
+      disconnectionLifetime: .application, verificationAttempts: 75, recoveryOwnerID: ownerID)
     var service = Self(discovery: discovery, store: store, controller: controller,
                 unavailableReason: controller == nil ? "当前系统不支持显示器连接控制。" : nil,
                 runtimeIdentity: { id in
@@ -86,33 +89,53 @@ struct LiteConnectionService: LiteConnectionAccess {
       service.recoveryCutoff = .distantFuture
     }
     service.ensureRecoveryProtection = ensureRecoveryProtection
+    service.coordinator = .shared
+    service.recoveryOwnerFilter = recoveryOwnerFilter
     return service
   }
 
   func snapshot() async throws -> LiteSnapshot {
+    if let coordinator { return try await coordinator.withLock { try await snapshotUnlocked() } }
+    return try await snapshotUnlocked()
+  }
+
+  private func snapshotUnlocked() async throws -> LiteSnapshot {
     let displays = try await discovery.discoverDisplays()
     let saved = try store.loadRecords()
-    let records = saved.map { record in
+    let records = try saved.map { record in
+      let superseded = try coordinator?.isSuperseded(record) == true
       guard record.requiresRediscovery != true,
             let id = LiteIdentity.stableID(record.stableID),
             !displays.contains(where: { LiteIdentity.stableID($0.stableID) == id }) else { return record }
       let reused = displays.contains { $0.runtimeID == record.runtimeID } ||
         runtimeIdentity(record.runtimeID).map { LiteIdentity.stableID($0.stableID) != id } == true
-      guard reused || record.disconnectedAt < recoveryCutoff else { return record }
+      guard superseded || reused || record.disconnectedAt < recoveryCutoff else { return record }
       return DisplayConnectionRecord(runtimeID: record.runtimeID, stableID: record.stableID,
-        name: record.name, disconnectedAt: record.disconnectedAt, requiresRediscovery: true)
+        name: record.name, disconnectedAt: record.disconnectedAt, requiresRediscovery: true,
+        operationID: record.operationID, ownerID: record.ownerID)
     }
     // Persist before allowing a new disconnect: the old ID must remain unsafe
     // even while the new display is temporarily absent or the App restarts.
     if records != saved { try store.saveRecords(records) }
-    return LiteSnapshot(displays: displays, records: records)
+    return LiteSnapshot(displays: displays, records: records.filter { recoveryOwnerFilter == nil || $0.ownerID == recoveryOwnerFilter })
   }
 
   func change(_ state: DisplayConnectionState, stableID: String) async throws -> DisplayConnectionOutcome {
+    if let coordinator { return try await coordinator.withLock { try await changeUnlocked(state, stableID: stableID) } }
+    return try await changeUnlocked(state, stableID: stableID)
+  }
+
+  private func changeUnlocked(_ state: DisplayConnectionState, stableID: String) async throws -> DisplayConnectionOutcome {
     guard let id = LiteIdentity.stableID(stableID), let controller else {
       throw LiteRefusal(unavailableReason ?? "无法确认显示器身份，请刷新后重试。")
     }
     let current = try await snapshot()
+    if let recoveryOwnerFilter {
+      guard state == .connected, let record = current.records.first(where: { LiteIdentity.stableID($0.stableID) == id }),
+        record.ownerID == recoveryOwnerFilter, try coordinator?.isSuperseded(record) != true else {
+        throw LiteRefusal("这条恢复任务已被较新的操作替代，未更改显示器。")
+      }
+    }
     if state == .disconnected, !current.pendingRecords.isEmpty {
       throw LiteRefusal("请先恢复已有记录的外屏，再断开另一台。")
     }

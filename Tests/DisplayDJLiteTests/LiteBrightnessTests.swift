@@ -105,6 +105,50 @@ private final class NativeFixture: BrightnessBackend {
 @Suite("Lite hardware brightness and interaction")
 @MainActor
 struct LiteBrightnessTests {
+  @Test func wakeInvalidatesOldValueAndDiscardsReadAlreadyInFlight() async {
+    let (model, access) = await prepared()
+    await access.pauseNextRead()
+    let read = Task { await model.reread(externalKey) }
+    await access.waitForRead()
+    model.invalidate(clearReadings: true)
+    #expect(model.value(for: externalKey) == nil && !model.canAdjust(externalKey))
+    await access.releaseRead(); await read.value
+    #expect(model.value(for: externalKey) == nil)
+    await model.refresh(displays: [internalPanel, externalPanel])
+    #expect(model.value(for: externalKey) == 62 && model.canAdjust(externalKey))
+    #expect(await access.calls().isEmpty)
+  }
+
+  @Test func topologyInvalidationDuringAWriteDoesNotReuseItsResult() async {
+    let (model, access) = await prepared()
+    await access.configure(block: true)
+    let write = Task { await model.set(70, for: externalKey) }
+    await access.wait()
+    model.invalidate(clearReadings: true)
+    await model.refresh(displays: [internalPanel, externalPanel])
+    #expect(model.value(for: externalKey) == nil)
+    await access.release(); await write.value
+    // The result came from a new read after the write completed, not the old
+    // operation's confirmation; no stale success announcement is retained.
+    #expect(model.value(for: externalKey) == 70 && model.feedback[externalKey] == nil)
+    #expect(await access.calls().count == 1)
+    #expect(!model.isWorking)
+  }
+
+  @Test func topologyEventDuringSnapshotRequiresAnotherFreshSnapshot() async {
+    let connection = ConnectionFixture(); let access = BrightnessFixture()
+    let model = LiteModel(access: connection, brightnessAccess: access)
+    await connection.pauseNextSnapshot()
+    let refresh = Task { await model.refresh() }
+    await connection.waitForSnapshot()
+    model.invalidateForTopologyChange()
+    #expect(!model.canChangeConnection)
+    await connection.releaseSnapshot(); await refresh.value
+    #expect(await connection.snapshotCount() == 2)
+    #expect(model.canChangeConnection && model.brightness?.value(for: internalKey) == 45)
+    #expect(await access.calls().isEmpty)
+  }
+
   private func prepared() async -> (LiteBrightnessModel, BrightnessFixture) {
     let access = BrightnessFixture()
     let model = LiteBrightnessModel(access: access)

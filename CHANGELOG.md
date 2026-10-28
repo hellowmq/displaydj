@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-29 — Full 1.1.0 / Lite 0.2.0 (Prerelease)
+
+- Fix the Apple Silicon IOAV Get VCP request checksum by preserving the source-address contribution; retain strict reply verification. Hardware DDC brightness reads and writes now pass on the tested H27T22S DisplayPort connection.
+- Add local, redacted JSON/text diagnostic export to both apps without changing brightness, display connections, permissions or recovery records.
+- Invalidate stale brightness requests on wake/topology changes and bound Lite refresh retries.
+- Coordinate complete connection transactions across cooperating new Full/Lite/CLI processes and prevent older recovery intents from superseding newer operations. Old app versions do not participate in this protocol.
+- Validation: 773 automated tests; both installed apps adjusted H27T22S from 0% to 5% and restored 0%, with independent DDC reads. Hardware, signing and untested-device limits are detailed in [release validation](docs/RELEASE-2026-10-29.md).
+- Publish separate new tags/assets; preserve earlier releases. Apple Silicon arm64, ad-hoc signed, not notarized; Lite remains a prerelease.
+
 ## 2026-10-25 — Full 1.0.2 / Lite 0.1.0 refreshed in place
 
 - Retain both version numbers and existing release URLs at the maintainer’s explicit request; replace both tags, ZIP/DMG files and SHA-256 sidecars with this source revision. Lite remains a prerelease and Full remains latest stable.

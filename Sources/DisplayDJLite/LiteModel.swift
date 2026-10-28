@@ -50,6 +50,9 @@ final class LiteModel: ObservableObject {
   private let access: any LiteConnectionAccess
   private var refreshAgain = false
   private var rowOrder: [String: Int] = [:]
+  private var topologyGeneration: UInt64 = 0
+  var canChangeConnection: Bool { hasFreshTopology && !isBusy }
+  var needsLifecycleRetry: Bool { !hasFreshTopology || brightness?.hasReadFailures == true }
   var isBusy: Bool { isRefreshing || busyID != nil || isRestoringBeforeQuit || brightness?.isWorking == true }
   var canQuit: Bool { !isBusy }
 
@@ -87,13 +90,26 @@ final class LiteModel: ObservableObject {
     await refreshRows()
   }
 
+  func invalidateForTopologyChange() {
+    topologyGeneration &+= 1
+    hasFreshTopology = false
+    brightness?.invalidate(clearReadings: true)
+    if isRefreshing { refreshAgain = true }
+  }
+
   private func refreshRows() async {
     guard !isRefreshing, busyID == nil else { refreshAgain = true; return }
     repeat {
       refreshAgain = false
       isRefreshing = true
+      let generation = topologyGeneration
       do {
         let snapshot = try await access.snapshot()
+        guard generation == topologyGeneration, !Task.isCancelled else {
+          isRefreshing = false
+          if Task.isCancelled { return }
+          continue
+        }
         pendingRecoveryCount = snapshot.pendingRecords.count
         let fresh = Self.rows(from: snapshot, unavailableReason: access.unavailableReason)
         for row in fresh where rowOrder[row.id] == nil { rowOrder[row.id] = rowOrder.count }
@@ -101,6 +117,7 @@ final class LiteModel: ObservableObject {
         hasFreshTopology = true
         builtInDisplays = brightness == nil ? [] : snapshot.displays.filter { $0.isBuiltIn }
         await brightness?.refresh(displays: snapshot.displays)
+        guard generation == topologyGeneration else { isRefreshing = false; continue }
         for row in rows {
           if case .confirmed(let state) = feedback[row.id],
              (state == .connected) != row.isOnline { feedback[row.id] = nil }
@@ -128,7 +145,7 @@ final class LiteModel: ObservableObject {
   }
 
   private func apply(_ row: LiteDisplayRow) async -> Bool {
-    guard error == nil, row.refusal == nil, let id = row.stableID else { return false }
+    guard hasFreshTopology, error == nil, row.refusal == nil, let id = row.stableID else { return false }
     var succeeded = false
     busyID = row.id
     feedback[row.id] = .pending(row.action)
@@ -140,6 +157,8 @@ final class LiteModel: ObservableObject {
       feedback[row.id] = .confirmed(outcome.observedState)
       succeeded = true
     } catch {
+      SupportDiagnosticEvents.shared.record(error, operation: row.action == .connected ? .restore : .write,
+        stableID: row.stableID)
       feedback[row.id] = .failed(Self.failureMessage(error))
     }
     busyID = nil
@@ -219,6 +238,9 @@ final class LiteModel: ObservableObject {
     if let refusal = error as? LiteRefusal { return refusal.message }
     if let error = error as? DisplayDJError {
       switch error.code {
+      case .busy: return "另一个连接操作仍在进行，请稍后刷新重试。"
+      case .conflict where error.details["reason"] == "superseded-recovery":
+        return "这条恢复记录已被较新的操作替代。请回到发起操作的应用恢复屏幕。"
       case .verificationFailed: return "未确认操作结果。恢复入口会保留，请刷新或重试。"
       case .conflict: return "已拒绝操作：需要保留至少一块在线屏幕。"
       case .displayNotFound, .ambiguousDisplay: return "目标已变化或不唯一，请刷新后重试。"

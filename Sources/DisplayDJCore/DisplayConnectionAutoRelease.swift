@@ -44,17 +44,20 @@ public struct DisplayConnectionAutoRelease: Sendable {
   private let store: any DisplayConnectionRecordStoring
   private let runtimeStatus: any DisplayRuntimeStatusQuerying
   private let ledger: DisplayConnectionIntentLedger
+  private let coordinator: DisplayConnectionCoordinator?
 
   public init(
     transaction: any DisplayConfigurationTransactionApplying,
     store: any DisplayConnectionRecordStoring,
     runtimeStatus: any DisplayRuntimeStatusQuerying = CoreGraphicsDisplayRuntimeStatus(),
-    ledger: DisplayConnectionIntentLedger = .shared
+    ledger: DisplayConnectionIntentLedger = .shared,
+    coordinator: DisplayConnectionCoordinator? = nil
   ) {
     self.transaction = transaction
     self.store = store
     self.runtimeStatus = runtimeStatus
     self.ledger = ledger
+    self.coordinator = coordinator
   }
 
   /// The production watcher, using the private entry point.
@@ -73,7 +76,8 @@ public struct DisplayConnectionAutoRelease: Sendable {
       ),
       store: store,
       runtimeStatus: runtimeStatus,
-      ledger: ledger
+      ledger: ledger,
+      coordinator: .shared
     )
   }
 
@@ -84,6 +88,22 @@ public struct DisplayConnectionAutoRelease: Sendable {
   public func handle(
     _ change: DisplayTopologyChange
   ) throws -> DisplayConnectionAutoReleaseOutcome? {
+    if let coordinator { return try coordinator.withImmediateLock { try handleUnlocked(change) } }
+    return try handleUnlocked(change)
+  }
+
+  public func handleCoordinated(_ change: DisplayTopologyChange, receivedAt: Date) async throws -> DisplayConnectionAutoReleaseOutcome? {
+    guard let coordinator else { return try handleUnlocked(change) }
+    // Capture suppression before queueing: waiting for a slow transaction must
+    // not turn its own callback into a physical unplug when the grace expires.
+    let suppressed = ledger.isSuppressed(runtimeID: change.runtimeID)
+    return try await coordinator.withLock(timeout: .seconds(20)) {
+      guard !suppressed, try !coordinator.hasNewerIntent(runtimeID: change.runtimeID, than: receivedAt) else { return nil }
+      return try handleUnlocked(change)
+    }
+  }
+
+  private func handleUnlocked(_ change: DisplayTopologyChange) throws -> DisplayConnectionAutoReleaseOutcome? {
     guard !ledger.isSuppressed(runtimeID: change.runtimeID) else { return nil }
 
     switch change.kind {
@@ -112,6 +132,8 @@ public struct DisplayConnectionAutoRelease: Sendable {
     guard let index = records.firstIndex(where: { $0.runtimeID == runtimeID }) else {
       return nil
     }
+    if try coordinator?.isSuperseded(records[index]) == true { return nil }
+    guard !runtimeStatus.isActive(runtimeID: runtimeID) else { return nil }
 
     let record = records.remove(at: index)
     try store.saveRecords(records)
@@ -140,7 +162,14 @@ public struct DisplayConnectionAutoRelease: Sendable {
     guard !runtimeStatus.isActive(runtimeID: runtimeID) else { return nil }
 
     let records = try store.loadRecords()
+    if let record = records.first(where: { $0.runtimeID == runtimeID }),
+       try coordinator?.isSuperseded(record) == true { return nil }
     try transaction.setEnabled(true, forRuntimeID: runtimeID)
+
+    guard runtimeStatus.isActive(runtimeID: runtimeID) else {
+      return DisplayConnectionAutoReleaseOutcome(runtimeID: runtimeID, action: .restoredOnReconnect,
+        displayName: records.first(where: { $0.runtimeID == runtimeID })?.name, wasVerified: false)
+    }
 
     let remaining = records.filter { $0.runtimeID != runtimeID }
     if remaining.count != records.count {

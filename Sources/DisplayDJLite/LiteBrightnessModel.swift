@@ -31,7 +31,9 @@ final class LiteBrightnessModel: ObservableObject {
   private var worker: Task<Void, Never>?
   private var dismissals: [String: Task<Void, Never>] = [:]
   private var generation: UInt64 = 0
+  private var needsReadAfterWrite = false
   var isWorking: Bool { isReading || isWriting }
+  var hasReadFailures: Bool { eligible.keys.contains { confirmed[$0] == nil } }
 
   init(access: any LiteBrightnessAccess) { self.access = access }
 
@@ -109,19 +111,22 @@ final class LiteBrightnessModel: ObservableObject {
       feedback[id] = nil
     } catch {
       guard pass == generation else { return }
+      SupportDiagnosticEvents.shared.record(error, operation: .read, stableID: id)
       confirmed[id] = nil
       feedback[id] = .failed(Self.reason(error, reading: true))
     }
   }
 
-  func invalidate() {
+  func invalidate(clearReadings: Bool = false) {
+    if clearReadings && isWriting { needsReadAfterWrite = true }
     let affected = Set(confirmed.keys).union(intended.keys).union(feedback.keys)
     generation &+= 1
     eligible = [:]; epochs = [:]; pending = []; intended = [:]
+    if clearReadings { confirmed = [:] }
     isReading = false
     for id in affected {
       dismissals[id]?.cancel(); dismissals[id] = nil
-      feedback[id] = .failed("屏幕状态未确认，请刷新重试。")
+      feedback[id] = clearReadings ? .reading : .failed("屏幕状态未确认，请刷新重试。")
     }
   }
 
@@ -161,6 +166,7 @@ final class LiteBrightnessModel: ObservableObject {
           self?.dismissals[request.id] = nil
         }
       } catch {
+        SupportDiagnosticEvents.shared.record(error, operation: .write, stableID: request.id)
         guard identity != nil, epochs[request.id] == identity,
               !pending.contains(where: { $0.id == request.id }) else { continue }
         intended[request.id] = nil
@@ -169,6 +175,20 @@ final class LiteBrightnessModel: ObservableObject {
     }
     isWriting = false
     worker = nil
+    // A topology refresh can replace the identity epoch while the old write is
+    // still completing. Re-read those targets once it finishes; do not leave
+    // them on an unconfirmed placeholder until another user action.
+    guard needsReadAfterWrite else { return }
+    needsReadAfterWrite = false
+    let missing = eligible.keys.filter { confirmed[$0] == nil }.sorted()
+    guard !missing.isEmpty else { return }
+    let pass = generation
+    isReading = true
+    defer { if pass == generation { isReading = false } }
+    for id in missing {
+      guard pass == generation else { return }
+      await readValue(id, pass: pass)
+    }
   }
 
   private static func reason(_ error: Error, reading: Bool) -> String {

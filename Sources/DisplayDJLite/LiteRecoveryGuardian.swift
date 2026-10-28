@@ -7,6 +7,7 @@ import Foundation
 /// then exits. No LaunchAgent, login item, or additional installed executable.
 actor LiteRecoveryGuardian {
   private var process: Process?
+  nonisolated let ownerID = UUID()
 
   func ensureStarted() throws {
     if process?.isRunning == true { return }
@@ -16,7 +17,7 @@ actor LiteRecoveryGuardian {
     let ready = Pipe()
     let child = Process()
     child.executableURL = executable
-    child.arguments = ["--recovery-guardian", String(getpid())]
+    child.arguments = ["--recovery-guardian", String(getpid()), ownerID.uuidString]
     child.standardOutput = ready
     child.standardInput = FileHandle.nullDevice
     child.standardError = FileHandle.nullDevice
@@ -33,7 +34,7 @@ actor LiteRecoveryGuardian {
   }
 
   @MainActor
-  static func run(parentPID: pid_t) async -> Int32 {
+  static func run(parentPID: pid_t, ownerID: UUID) async -> Int32 {
     guard parentPID > 1, getppid() == parentPID else { return 2 }
     await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
       let source = DispatchSource.makeProcessSource(identifier: parentPID, eventMask: .exit, queue: .global())
@@ -48,7 +49,7 @@ actor LiteRecoveryGuardian {
     }
     // Allow an in-flight WindowServer transaction from the parent to settle.
     try? await Task.sleep(for: .milliseconds(500))
-    return await restoreAfterParentExit(access: LiteConnectionService.live()) ? 0 : 1
+    return await restoreAfterParentExit(access: LiteConnectionService.live(recoveryOwnerFilter: ownerID)) ? 0 : 1
   }
 
   static func restoreAfterParentExit(access: any LiteConnectionAccess) async -> Bool {
