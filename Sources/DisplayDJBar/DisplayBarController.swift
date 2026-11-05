@@ -2,8 +2,10 @@ import AppKit
 import ApplicationServices
 import Combine
 import DisplayDJCore
+import DisplayDJUI
 import OSLog
 import SwiftUI
+import VibeDisplayCore
 
 private let displayTopologyLogger = Logger(
   subsystem: "io.github.hellowmq.displaydj", category: "DisplayTopology"
@@ -168,6 +170,8 @@ final class DisplayBarController: NSObject, ObservableObject {
   /// The user's display presentation choices, loaded at setup. Published so a card
   /// re-renders when its alias changes without the topology changing.
   @Published var preferences = DisplayPreferences()
+  /// In-app updater for checking and installing updates from GitHub.
+  @Published var updateManager = UpdateManager(product: .full, currentVersion: VibeVersion.current)
   /// Read-only preparation before opting into synchronized hardware changes.
   @Published var isPreparingBrightnessSync = false
 

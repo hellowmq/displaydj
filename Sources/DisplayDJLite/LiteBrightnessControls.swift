@@ -27,12 +27,24 @@ struct LiteBrightnessControls: View {
       HStack(alignment: .firstTextBaseline) {
         Text("硬件亮度").font(.system(size: 11)).foregroundStyle(.secondary)
         Spacer()
-        HStack(alignment: .firstTextBaseline, spacing: 1) {
-          Text(value.map(String.init) ?? "—")
-            .font(.system(size: 18, weight: .semibold, design: .monospaced))
-          if value != nil { Text("%").font(.system(size: 11)).foregroundStyle(.secondary) }
+        ZStack(alignment: .trailing) {
+          HStack(alignment: .firstTextBaseline, spacing: 1) {
+            Text("100").font(.system(size: 18, weight: .semibold, design: .monospaced)).lineLimit(1)
+            Text("%").font(.system(size: 11)).lineLimit(1)
+          }
+          .hidden()
+          .accessibilityHidden(true)
+
+          HStack(alignment: .firstTextBaseline, spacing: 1) {
+            Text(value.map(String.init) ?? "—")
+              .font(.system(size: 18, weight: .semibold, design: .monospaced))
+              .lineLimit(1)
+            if value != nil {
+              Text("%").font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+            }
+          }
+          .lineLimit(1)
         }
-        .frame(width: 52, alignment: .trailing)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(name) \(valueDescription)")
         .accessibilityValue(value.map { "\($0)%" } ?? "未知")
@@ -41,15 +53,11 @@ struct LiteBrightnessControls: View {
         hasReading: value != nil, name: name) { target in
           Task { await model.setBrightness(target, for: id) }
         }.frame(height: 44)
-      Text(dragging ? "调节中" : (brightness.feedback[id]?.message ?? " "))
-        .font(.system(size: 11)).foregroundStyle(failure == nil ? Color.secondary : LiteFeedbackColor.warning(for: colorScheme))
-        .fixedSize(horizontal: false, vertical: true)
-        .accessibilityHidden(!dragging && brightness.feedback[id] == nil)
-      if failure != nil {
+      if let failure {
+        Text(failure)
+          .font(.system(size: 11)).foregroundStyle(LiteFeedbackColor.warning(for: colorScheme))
+          .fixedSize(horizontal: false, vertical: true)
         HStack {
-          if brightness.confirmed[id] != nil {
-            Text("百分比为上次确认值").font(.system(size: 11)).foregroundStyle(.secondary)
-          }
           Spacer()
           Button("重新读取") { Task { await model.rereadBrightness(id) } }
             .buttonStyle(.link).font(.system(size: 11)).disabled(!model.canRereadBrightness(id))

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-06 — Full 1.2.0 / Lite 0.3.0 (Prerelease)
+
+- Full 和 Lite 分别从官方 GitHub Releases 检查各自的更新，匹配产品与架构，校验 SHA-256、应用标识、版本与代码签名。
+- 完整暂存新版后才申请退出，仍经过原有的显示器恢复流程。取消退出保留当前应用并清理暂存包；如果替换失败或 macOS 拒绝重新启动，尝试恢复旧版。
+- 改进菜单弹窗动画和亮度数值布局；内建屏媒体亮度键交由 macOS 处理。
+- 首次引入应用内更新，早期版本须手动下载。验证范围、签名和升级说明见[发布记录](docs/RELEASE-2026-11-06.md)。
+
 ## 2026-10-29 — Full 1.1.0 / Lite 0.2.0 (Prerelease)
 
 - Fix the Apple Silicon IOAV Get VCP request checksum by preserving the source-address contribution; retain strict reply verification. Hardware DDC brightness reads and writes now pass on the tested H27T22S DisplayPort connection.

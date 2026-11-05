@@ -66,10 +66,13 @@ extension DisplayBarController {
 
   /// Resolve synchronously at key-down, including WindowServer's current online state.
   /// Discovery may lag an unplug event; in that gap we must not swallow the system key.
+  /// Media keys (F1/F2 and Touch Bar) for built-in displays must never be intercepted;
+  /// macOS natively manages internal panel backlight, Touch Bar gestures, and ALS.
   func mediaKeyTargetStableID() -> String? {
     guard let id = hotkeyTargetStableID() else { return nil }
     let matches = displays.filter { $0.stableID == id }
     guard matches.count == 1, let display = matches.first,
+          !display.isBuiltIn,
           CGDisplayIsActive(display.runtimeID) != 0,
           CGDisplayIsInMirrorSet(display.runtimeID) == 0 else { return nil }
     return id

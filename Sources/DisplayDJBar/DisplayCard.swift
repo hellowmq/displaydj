@@ -19,8 +19,7 @@ struct DisplayCard: View {
   private var selected: Bool { controller.selectedDisplayKey == display.selectionKey }
   private var reading: Int? { controller.displayedBrightness(for: id) }
   private var status: String? {
-    if isDragging { return "调节中" }
-    if let feedback = controller.brightnessFeedback[id] { return feedback.message }
+    if let feedback = controller.brightnessFeedback[id], feedback.isFailure { return feedback.message }
     if reading == nil && controller.failure(for: display.selectionKey) == nil { return "正在读取亮度" }
     return nil
   }
@@ -59,7 +58,6 @@ struct DisplayCard: View {
             .disabled(controller.displays.last?.selectionKey == display.selectionKey || id.isEmpty)
             .accessibilityLabel("下移 \(name)")
         }.controlSize(.small)
-        Text("别名留空使用系统名称").font(.system(size: 11)).foregroundStyle(.secondary)
       }
       BrightnessSlider(value: $sliderValue,
         isEnabled: controller.canAdjustRelatively(id) && !controller.isChangingConnection && !controller.isRestoringConnections,
@@ -74,9 +72,6 @@ struct DisplayCard: View {
         Text(status ?? " ").foregroundStyle(.secondary)
           .accessibilityHidden(status == nil)
       }.font(.system(size: 11)).frame(minHeight: 15, alignment: .topLeading)
-      if controller.brightnessFeedback[id]?.isFailure == true, controller.brightnessByID[id] != nil {
-        Text("百分比为上次确认值").font(.system(size: 11)).foregroundStyle(.secondary)
-      }
       if let failure = controller.failure(for: display.selectionKey) {
         FailureBanner(failure: failure, controller: controller)
       }

@@ -12,7 +12,7 @@ A macOS menu bar app and standalone CLI for hands-on display control and automat
 
 `macOS 13+ target` · `Swift 6` · `Apple Silicon DDC/CI` · `MIT`
 
-[Download Full 1.1.0](https://github.com/hellowmq/displaydj/releases/tag/v1.1.0) · [Lite 0.2.0 prerelease](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.2.0) · [Quick start](#quick-start) · [CLI / HTTP reference](docs/API.md)
+[Download Full 1.2.0](https://github.com/hellowmq/displaydj/releases/tag/v1.2.0) · [Lite 0.3.0 prerelease](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.3.0) · [Quick start](#quick-start) · [CLI / HTTP reference](docs/API.md)
 
 </div>
 
@@ -20,17 +20,19 @@ A macOS menu bar app and standalone CLI for hands-on display control and automat
 
 | Product | Scope | Status |
 | --- | --- | --- |
-| **DisplayDJ Full** | Brightness, display settings, connections, CLI and optional local service | [1.1.0 download](https://github.com/hellowmq/displaydj/releases/tag/v1.1.0) |
-| **DisplayDJ Lite** | Built-in brightness, supported external-display DDC brightness, and disconnect/reconnect with saved recovery | [0.2.0 prerelease download](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.2.0) · [Validation notes](docs/DISPLAYDJ-LITE.md) |
+| **DisplayDJ Full** | Brightness, display settings, connections, CLI and optional local service | [1.2.0 download](https://github.com/hellowmq/displaydj/releases/tag/v1.2.0) |
+| **DisplayDJ Lite** | Built-in brightness, supported external-display DDC brightness, and disconnect/reconnect with saved recovery | [0.3.0 prerelease download](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.3.0) · [Validation notes](docs/DISPLAYDJ-LITE.md) |
 
 Choose Lite for basic brightness and display connections, or Full for display settings, automation and the CLI. Both keep separate App identities, recovery data and versions. See [maintenance/release standards](docs/MAINTENANCE.md), [contributing](CONTRIBUTING.md) and the [interaction contract](docs/INTERACTION-CONTRACT.md).
 
-| DisplayDJ Full 1.1.0 | DisplayDJ Lite 0.2.0 (Prerelease) |
+| DisplayDJ Full | DisplayDJ Lite |
 | :---: | :---: |
 | <img src="Assets/Previews/DisplayDJ-1.0.2-2026-10-25.jpg" alt="Full 1.0.2: real built-in brightness control" width="320"> | <img src="Assets/Previews/DisplayDJLite-0.1.0-2026-10-25.jpg" alt="Lite 0.1.0: real built-in brightness and an offline historical record" width="320"> |
-| [ZIP](https://github.com/hellowmq/displaydj/releases/download/v1.1.0/displaydj-1.1.0-macos-arm64.zip) · [DMG](https://github.com/hellowmq/displaydj/releases/download/v1.1.0/displaydj-1.1.0-macos-arm64.dmg) · [ZIP SHA-256](https://github.com/hellowmq/displaydj/releases/download/v1.1.0/displaydj-1.1.0-macos-arm64.zip.sha256) · [DMG SHA-256](https://github.com/hellowmq/displaydj/releases/download/v1.1.0/displaydj-1.1.0-macos-arm64.dmg.sha256) | [ZIP](https://github.com/hellowmq/displaydj/releases/download/lite-v0.2.0/displaydj-lite-0.2.0-macos-arm64.zip) · [DMG](https://github.com/hellowmq/displaydj/releases/download/lite-v0.2.0/displaydj-lite-0.2.0-macos-arm64.dmg) · [ZIP SHA-256](https://github.com/hellowmq/displaydj/releases/download/lite-v0.2.0/displaydj-lite-0.2.0-macos-arm64.zip.sha256) · [DMG SHA-256](https://github.com/hellowmq/displaydj/releases/download/lite-v0.2.0/displaydj-lite-0.2.0-macos-arm64.dmg.sha256) |
+| [ZIP](https://github.com/hellowmq/displaydj/releases/download/v1.2.0/displaydj-1.2.0-macos-arm64.zip) · [DMG](https://github.com/hellowmq/displaydj/releases/download/v1.2.0/displaydj-1.2.0-macos-arm64.dmg) · [ZIP SHA-256](https://github.com/hellowmq/displaydj/releases/download/v1.2.0/displaydj-1.2.0-macos-arm64.zip.sha256) · [DMG SHA-256](https://github.com/hellowmq/displaydj/releases/download/v1.2.0/displaydj-1.2.0-macos-arm64.dmg.sha256) | [ZIP](https://github.com/hellowmq/displaydj/releases/download/lite-v0.3.0/displaydj-lite-0.3.0-macos-arm64.zip) · [DMG](https://github.com/hellowmq/displaydj/releases/download/lite-v0.3.0/displaydj-lite-0.3.0-macos-arm64.dmg) · [ZIP SHA-256](https://github.com/hellowmq/displaydj/releases/download/lite-v0.3.0/displaydj-lite-0.3.0-macos-arm64.zip.sha256) · [DMG SHA-256](https://github.com/hellowmq/displaydj/releases/download/lite-v0.3.0/displaydj-lite-0.3.0-macos-arm64.dmg.sha256) |
 
-Real application windows from the 2026-10-25 build. These screenshots show the built-in display on this Mac; the saved offline HP record is not an online display or proof of external DDC support.
+Real application windows from the 2026-10-25 builds (Full 1.0.2 and Lite 0.1.0). These screenshots show the built-in display on this Mac; the saved offline HP record is not an online display or proof of external DDC support.
+
+**2026-11-06: Full 1.2.0 / Lite 0.3.0 prerelease.** Check for updates inside either app. The updater verifies the downloaded archive, stages the new bundle before exit, and attempts to restore the previous app if macOS refuses the relaunch. Earlier versions must be updated manually. See [what was verified](docs/RELEASE-2026-11-06.md).
 
 **2026-10-29: Full 1.1.0 / Lite 0.2.0 prerelease.** Fix DDC query checksums, add redacted local diagnostic export, and improve wake/topology handling and connection recovery coordination. Both installed apps passed real H27T22S brightness adjustment and restoration. See the [release validation and limits](docs/RELEASE-2026-10-29.md).
 
@@ -68,11 +70,11 @@ The `displaydj` compatibility command is also retained, so existing `get brightn
 
 ### Download the app
 
-For basic brightness and display connections, download [Lite 0.2.0](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.2.0) and place `DisplayDJLite.app` in `/Applications`. Lite remains a prerelease. Restore current external displays and quit before replacing either app; keep the two app bundles separate.
+For basic brightness and display connections, download [Lite 0.3.0](https://github.com/hellowmq/displaydj/releases/tag/lite-v0.3.0) and place `DisplayDJLite.app` in `/Applications`. Lite remains a prerelease. Restore current external displays and quit before replacing either app; keep the two app bundles separate.
 
-Download the arm64 ZIP or DMG from the [Full 1.1.0 release](https://github.com/hellowmq/displaydj/releases/tag/v1.1.0). The bundle includes `DisplayDJ.app`, the standalone `display-cli`, and the legacy-compatible `displaydj` command.
+Download the arm64 ZIP or DMG from the [Full 1.2.0 release](https://github.com/hellowmq/displaydj/releases/tag/v1.2.0). The bundle includes `DisplayDJ.app`, the standalone `display-cli`, and the legacy-compatible `displaydj` command.
 
-The current downloads are for Apple Silicon only. They use ad-hoc signing and are not Developer ID signed or Apple-notarized, so macOS may block the first launch. Control-click DisplayDJ in Finder and choose **Open**, or allow it in **System Settings → Privacy & Security**. Global shortcuts and optional brightness media keys require Accessibility permission. After replacing an ad-hoc-signed app, remove the old DisplayDJ permission entry and re-add `/Applications/DisplayDJ.app` if global keys stop working; grant Input Monitoring if requested, then quit and reopen DisplayDJ. See the [release notes](docs/RELEASE-NOTES-1.1.0.md) for the complete installation and compatibility notes.
+The current downloads are for Apple Silicon only. They use ad-hoc signing and are not Developer ID signed or Apple-notarized, so macOS may block the first launch. Control-click DisplayDJ in Finder and choose **Open**, or allow it in **System Settings → Privacy & Security**. Global shortcuts and optional brightness media keys require Accessibility permission. After replacing an ad-hoc-signed app, remove the old DisplayDJ permission entry and re-add `/Applications/DisplayDJ.app` if global keys stop working; grant Input Monitoring if requested, then quit and reopen DisplayDJ. See the [release notes](docs/RELEASE-2026-11-06.md) for the complete installation and compatibility notes.
 
 ### Install the command-line tool
 
@@ -236,6 +238,7 @@ Tests cover both original test suites and their integration boundaries. The smok
 - [Architecture and migration](docs/ARCHITECTURE.md)
 - [Provenance and licensing](docs/PROVENANCE.md)
 - [Validation results](docs/VALIDATION.md)
+- [1.2.0 / Lite 0.3.0 release notes](docs/RELEASE-2026-11-06.md)
 - [1.1.0 release notes](docs/RELEASE-NOTES-1.1.0.md)
 - [1.0 acceptance checklist](docs/RELEASE-1.0-CHECKLIST.md)
 - [Staged device validation](docs/DEVICE-VALIDATION.md)

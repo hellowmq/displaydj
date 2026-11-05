@@ -1,5 +1,6 @@
 import AppKit
 import DisplayDJCore
+import DisplayDJUI
 import SwiftUI
 
 @MainActor
@@ -58,6 +59,7 @@ final class LiteApplication: NSObject, NSApplicationDelegate, NSPopoverDelegate 
     }, perform: { [weak self] row in self?.requestAction(row) }))
     hosting.sizingOptions = [.preferredContentSize]
     popover.contentViewController = hosting
+    popover.animates = false
     popover.behavior = .transient
     popover.delegate = self
     if !isPreview {
@@ -86,10 +88,16 @@ final class LiteApplication: NSObject, NSApplicationDelegate, NSPopoverDelegate 
   }
 
   @objc private func togglePopover() {
-    if popover.isShown { popover.performClose(nil); return }
     guard let button = statusItem?.button else { return }
+    if popover.isShown {
+      PopoverScaleAnimator.animateOut(popover: popover, button: button) { [weak self] in
+        self?.popover.performClose(nil)
+      }
+      return
+    }
     if let window { window.close(); self.window = nil }
     popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+    PopoverScaleAnimator.animateIn(popover: popover, button: button)
     Task { await model?.refresh() }
   }
 
@@ -128,7 +136,10 @@ final class LiteApplication: NSObject, NSApplicationDelegate, NSPopoverDelegate 
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     if canTerminate { return .terminateNow }
-    guard let model, model.canQuit, !isCheckingQuit, !isConfirmingConnection else { return .terminateCancel }
+    guard let model, model.canQuit, !isCheckingQuit, !isConfirmingConnection else {
+      model?.updateManager.cancelPendingUpdate()
+      return .terminateCancel
+    }
     isCheckingQuit = true
     Task { @MainActor in
       await model.refresh()
@@ -160,6 +171,7 @@ final class LiteApplication: NSObject, NSApplicationDelegate, NSPopoverDelegate 
   }
 
   private func finishQuit(_ approved: Bool) {
+    if !approved { model?.updateManager.cancelPendingUpdate() }
     canTerminate = approved
     isCheckingQuit = false
     NSApplication.shared.reply(toApplicationShouldTerminate: approved)

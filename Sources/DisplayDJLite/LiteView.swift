@@ -76,6 +76,8 @@ struct LiteView: View {
               Text("内建屏、镜像屏及最后一块在线屏幕受到保护。")
               DiagnosticExportButton(product: .lite, version: LiteIdentity.version,
                 store: FileDisplayConnectionRecordStore(fileURL: LiteIdentity.recordURL()), simulated: isPreview)
+              Divider()
+              UpdateSectionView(manager: model.updateManager, compact: true)
               if !isPreview {
                 Link("恢复、覆盖安装与卸载说明", destination: URL(string: "https://github.com/hellowmq/displaydj/blob/master/docs/LITE-RECOVERY.md")!)
               }
@@ -123,7 +125,6 @@ struct LiteView: View {
             } else {
               Text("无法确认屏幕身份，请刷新后重试。").font(.system(size: 11)).foregroundStyle(.secondary)
             }
-            Text("内建屏仅调节亮度").font(.system(size: 11)).foregroundStyle(.secondary)
           }.padding(.vertical, 15)
           if !model.rows.isEmpty { Divider() }
         }
@@ -217,13 +218,9 @@ private struct LiteDisplayRowView: View {
   }
 
   private var statusText: String {
-    if pending { return row.action == .connected ? "正在恢复连接…" : "正在断开…" }
-    if row.requiresRediscovery { return "未接入 · 保留历史记录" }
-    if row.hasRecoveryRecord && row.isOnline { return "已在线，待确认恢复" }
-    if case .confirmed(let state) = model.feedback[row.id], (state == .connected) == row.isOnline {
-      return state == .connected ? "已恢复连接" : "已断开，可恢复"
-    }
-    return row.isOnline ? "已连接" : "有恢复记录，可尝试连接"
+    if pending { return row.action == .connected ? "正在连接…" : "正在断开…" }
+    if row.requiresRediscovery { return "未接入" }
+    return row.isOnline ? "已连接" : "已断开"
   }
 
   private var actionTitle: String {

@@ -8,7 +8,10 @@ final class FullApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDe
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     if canTerminate { return .terminateNow }
-    guard !controller.isLoading, !controller.isCheckingQuit, !controller.isConfirmingDisconnect else { return .terminateCancel }
+    guard !controller.isLoading, !controller.isCheckingQuit, !controller.isConfirmingDisconnect else {
+      controller.updateManager.cancelPendingUpdate()
+      return .terminateCancel
+    }
     controller.isCheckingQuit = true
     Task { @MainActor in
       controller.refreshDisconnectedDisplays()
@@ -38,6 +41,7 @@ final class FullApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDe
   }
 
   private func finish(_ approved: Bool) {
+    if !approved { controller.updateManager.cancelPendingUpdate() }
     canTerminate = approved
     controller.isCheckingQuit = false
     NSApp.reply(toApplicationShouldTerminate: approved)

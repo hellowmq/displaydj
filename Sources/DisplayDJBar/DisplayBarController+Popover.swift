@@ -1,4 +1,5 @@
 import AppKit
+import DisplayDJUI
 import SwiftUI
 
 extension DisplayBarController {
@@ -23,6 +24,7 @@ extension DisplayBarController {
     updateStatusItemTitle()
 
     let popover = NSPopover()
+    popover.animates = false
     popover.behavior = .transient
     popover.delegate = self
     let content = NSHostingController(rootView: DisplayBarView(controller: self))
@@ -38,7 +40,7 @@ extension DisplayBarController {
     eventMonitor = NSEvent.addGlobalMonitorForEvents(
       matching: [.leftMouseDown, .rightMouseDown]
     ) { [weak self] _ in
-      self?.closePopover()
+      self?.closePopoverAnimated()
     }
 
     // The wheel is the other thing the menu bar item answers to, and it needs no popover.
@@ -90,6 +92,11 @@ extension DisplayBarController {
     // Populate the status item before the first open when discovery is ready.
     // A temporarily empty result is retried while the popover is visible.
     Task { await scanAndRefresh() }
+    if !isInteractionPreview {
+      Task { [weak self] in
+        await self?.updateManager.checkForUpdates(isManual: false)
+      }
+    }
   }
 
   func scheduleTopologyRescan() {
@@ -123,10 +130,21 @@ extension DisplayBarController {
   @objc private func togglePopover() {
     guard let popover else { return }
     if popover.isShown {
-      closePopover()
+      closePopoverAnimated()
     } else if let button = statusItem.button {
       popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
       popover.contentViewController?.view.window?.makeKey()
+      PopoverScaleAnimator.animateIn(popover: popover, button: button)
+    }
+  }
+
+  private func closePopoverAnimated() {
+    guard let popover, popover.isShown, let button = statusItem.button else {
+      closePopover()
+      return
+    }
+    PopoverScaleAnimator.animateOut(popover: popover, button: button) { [weak self] in
+      self?.closePopover()
     }
   }
 

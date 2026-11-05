@@ -14,6 +14,7 @@ private actor KeyboardDiscovery: DisplayDiscovering {
                                     isVirtual: false, isMirrored: false)]
   func discoverDisplays() async throws -> [DisplayDescriptor] { displays }
   func removeA() { displays.removeFirst() }
+  func setDisplays(_ newDisplays: [DisplayDescriptor]) { displays = newDisplays }
 }
 
 @MainActor
@@ -281,5 +282,21 @@ struct KeyboardBrightnessTests {
     #expect(hardware.writes.first?.value == 100)
     #expect(store.load().brightnessSnapshots[uuid] == nil)
     #expect(store.load().brightnessRevisions?[key] != "agent-revision")
+  }
+
+  @Test func mediaKeyTargetNeverInterceptsBuiltInDisplay() async {
+    let (controller, _, _, discovery) = await fixture()
+    let builtInDescriptor = DisplayDescriptor(
+      runtimeID: 1,
+      stableID: "uuid:builtin-test-display",
+      name: "Built-in Retina Display",
+      isBuiltIn: true,
+      isVirtual: false,
+      isMirrored: false
+    )
+    await discovery.setDisplays([builtInDescriptor])
+    await controller.scanAndRefresh()
+    controller.selectDisplay(key: builtInDescriptor.selectionKey)
+    #expect(controller.mediaKeyTargetStableID() == nil)
   }
 }

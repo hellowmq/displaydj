@@ -22,45 +22,45 @@ struct BrightnessReadout: View {
 
   private var hasReading: Bool { BrightnessFormatting.showsUnit(for: value) }
 
-  /// Fixed width so the header never reflows as the digit count swings between `9`, `99` and
-  /// `100` mid-slide. The readout sits next to the display's action menu; a
-  /// variable-width number would slide left and right under the finger and nudge the name off
-  /// the leading edge. Sized to the widest value (`"100"` plus the `%` glyph, the semibold
-  /// face it is drawn in) and right-aligned so the digits always hug the action menu rather
-  /// than the name.
-  private static let maxWidth: CGFloat = {
-    let digitsFont = NSFont.monospacedSystemFont(ofSize: 18, weight: .semibold)
-    let unitFont = roundedFont(size: 11, weight: .medium)
-    let digits = (BrightnessFormatting.readoutDigits(for: 100) as NSString)
-      .size(withAttributes: [.font: digitsFont]).width
-    let unit = (BrightnessFormatting.unitSuffix as NSString)
-      .size(withAttributes: [.font: unitFont]).width
-    return ceil(digits + 1 + unit)
-  }()
-
-  /// Matches the rounded unit suffix; the digits use a separate monospaced face.
-  private static func roundedFont(size: CGFloat, weight: NSFont.Weight) -> NSFont {
-    let base = NSFont.systemFont(ofSize: size, weight: weight)
-    let descriptor = base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor
-    return NSFont(descriptor: descriptor, size: size) ?? base
-  }
-
   var body: some View {
-    HStack(alignment: .firstTextBaseline, spacing: 1) {
-      Text(BrightnessFormatting.readoutDigits(for: value))
-        .font(.system(size: 18, weight: hasReading ? .semibold : .medium, design: .monospaced))
-        .foregroundColor(hasReading ? .primary : .secondary)
+    ZStack(alignment: .trailing) {
+      // Prototype view: naturally measures the maximum boundary for "100%" using the exact font
+      // metrics of the current system, avoiding any hardcoded magic numbers while preventing header
+      // reflow (jitter) as brightness varies between 0 and 100.
+      prototypeRow
+        .hidden()
+        .accessibilityHidden(true)
 
-      if hasReading {
-        Text(BrightnessFormatting.unitSuffix)
-          .font(.system(size: 11, weight: .medium, design: .rounded))
-          .foregroundColor(.secondary)
+      HStack(alignment: .firstTextBaseline, spacing: 1) {
+        Text(BrightnessFormatting.readoutDigits(for: value))
+          .font(.system(size: 18, weight: hasReading ? .semibold : .medium, design: .monospaced))
+          .foregroundColor(hasReading ? .primary : .secondary)
+          .lineLimit(1)
+
+        if hasReading {
+          Text(BrightnessFormatting.unitSuffix)
+            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .foregroundColor(.secondary)
+            .lineLimit(1)
+        }
       }
+      .lineLimit(1)
+      .contentTransition(reduceMotion ? .identity : .numericText())
     }
-    .contentTransition(reduceMotion ? .identity : .numericText())
-    .frame(width: Self.maxWidth, alignment: .trailing)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(BrightnessAccessibility.currentBrightnessLabel)
     .accessibilityValue(BrightnessAccessibility.valueDescription(for: value))
+  }
+
+  private var prototypeRow: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 1) {
+      Text(BrightnessFormatting.readoutDigits(for: 100))
+        .font(.system(size: 18, weight: .semibold, design: .monospaced))
+        .lineLimit(1)
+      Text(BrightnessFormatting.unitSuffix)
+        .font(.system(size: 11, weight: .medium, design: .rounded))
+        .lineLimit(1)
+    }
+    .lineLimit(1)
   }
 }

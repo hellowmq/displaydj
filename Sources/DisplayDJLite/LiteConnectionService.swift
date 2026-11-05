@@ -5,7 +5,7 @@ import DisplayDJCore
 import Foundation
 
 enum LiteIdentity {
-  static let version = "0.2.0"
+  static let version = "0.3.0"
   static let bundleID = "io.github.hellowmq.displaydj.lite"
 
   static func recordURL(environment: [String: String] = ProcessInfo.processInfo.environment,

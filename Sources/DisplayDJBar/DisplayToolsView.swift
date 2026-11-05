@@ -385,6 +385,10 @@ struct DisplayToolsView: View {
                                 .disabled(controller.isInteractionPreview)
                         }
 
+                        ToolsSection("软件更新") {
+                            UpdateSectionView(manager: controller.updateManager)
+                        }
+
                         ToolsSection("诊断") {
                             DiagnosticExportButton(product: .full, version: VibeVersion.current,
                               store: controller.connectionStore,

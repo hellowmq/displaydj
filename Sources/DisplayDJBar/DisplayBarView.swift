@@ -76,6 +76,10 @@ struct DisplayBarView: View {
             withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) { isEditing = true }
           }.disabled(controller.displays.isEmpty || controller.isLoading)
           Button("操作偏好…") { controller.showDisplayTools(section: .preferences) }
+          Button("检查更新…") {
+            controller.showDisplayTools(section: .preferences)
+            Task { await controller.updateManager.checkForUpdates(isManual: true) }
+          }
           Divider()
           Button("退出 DisplayDJ") { NSApplication.shared.terminate(nil) }
             .disabled(controller.isLoading || controller.isRestoringConnections)
@@ -98,8 +102,6 @@ struct DisplayBarView: View {
             .disabled(controller.isPreparingBrightnessSync || controller.isWriting || isEditing)
           if controller.isPreparingBrightnessSync {
             Text("正在检查各屏亮度").foregroundStyle(.secondary)
-          } else if controller.isBrightnessSyncEnabled {
-            Text("其他屏按相同百分点变化").foregroundStyle(.secondary)
           }
         }
       }

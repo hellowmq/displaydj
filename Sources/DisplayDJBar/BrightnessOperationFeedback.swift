@@ -6,8 +6,7 @@ enum BrightnessOperationFeedback: Equatable {
   case failed
   var message: String {
     switch self {
-    case .confirming: "正在确认"
-    case .confirmed: "已确认"
+    case .confirming, .confirmed: ""
     case .failed: "未确认本次调节"
     }
   }

@@ -9,8 +9,7 @@ enum LiteBrightnessFeedback: Equatable {
   var message: String {
     switch self {
     case .reading: "正在读取亮度"
-    case .confirming: "正在确认"
-    case .confirmed: "已确认"
+    case .confirming, .confirmed: ""
     case .failed(let reason): reason
     }
   }

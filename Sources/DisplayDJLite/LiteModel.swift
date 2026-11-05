@@ -1,5 +1,6 @@
 import Combine
 import DisplayDJCore
+import DisplayDJUI
 import Foundation
 
 struct LiteDisplayRow: Identifiable {
@@ -44,6 +45,7 @@ final class LiteModel: ObservableObject {
   @Published private(set) var builtInDisplays: [DisplayDescriptor] = []
   @Published private(set) var isRefreshingFromToolbar = false
   let brightness: LiteBrightnessModel?
+  let updateManager: UpdateManager
   private var brightnessUpdates: AnyCancellable?
   private var hasFreshTopology = false
   var notices: [String: String] { feedback.mapValues(\.message) }
@@ -59,7 +61,11 @@ final class LiteModel: ObservableObject {
   init(access: any LiteConnectionAccess, brightnessAccess: (any LiteBrightnessAccess)? = nil) {
     self.access = access
     brightness = brightnessAccess.map { LiteBrightnessModel(access: $0) }
+    updateManager = UpdateManager(product: .lite, currentVersion: LiteIdentity.version)
     brightnessUpdates = brightness?.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
+    Task { [weak self] in
+      await self?.updateManager.checkForUpdates(isManual: false)
+    }
   }
 
   /// Acceptance is separate from the success/failure of individual device reads.
